@@ -1,0 +1,2906 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Card Sensei — Pokémon TCG Translator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400&family=Sora:wght@300;400;500;600&family=Noto+Serif+JP:wght@300;400;500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ── Custom properties ── */
+:root {
+  /* Palette */
+  --bg:          #EEEEEE;
+  --bg-raised:   #E4E4E4;
+  --surface:     #FFFFFF;
+  --surface-alt: #F6F6F6;
+  --dark:        #303841;
+  --dark-2:      #3A4750;
+  --red:         #D72323;
+  --red-dim:     #9B1A1A;
+  --red-pale:    rgba(215,35,35,0.07);
+  --red-mid:     rgba(215,35,35,0.18);
+  /* Text */
+  --text-primary:   #303841;
+  --text-secondary: #5E6B76;
+  --text-jp:        #303841;
+  /* Borders */
+  --border-subtle: rgba(48,56,65,0.09);
+  --border-mid:    rgba(48,56,65,0.18);
+  --border-bright: rgba(48,56,65,0.35);
+  /* Shadows */
+  --shadow-sm: 0 1px 4px rgba(48,56,65,0.08);
+  --shadow-md: 0 4px 20px rgba(48,56,65,0.10);
+  --shadow-lg: 0 8px 40px rgba(48,56,65,0.14);
+  /* Legacy aliases so JS-injected HTML still works */
+  --bg-deep:    #EEEEEE;
+  --bg-base:    #F6F6F6;
+  --bg-surface: #FFFFFF;
+  --bg-raised:  #E4E4E4;
+  --gold:       #D72323;
+  --gold-dim:   #9B1A1A;
+  --gold-mid:   #D72323;
+  --gold-bright:#D72323;
+  --gold-pale:  rgba(215,35,35,0.12);
+  /* Fonts */
+  --font-serif: 'Cormorant Garamond', serif;
+  --font-cinzel:'Cormorant Garamond', serif;
+  --font-sans:  'Sora', sans-serif;
+  --font-jp:    'Noto Serif JP', serif;
+  --font-mono:  'JetBrains Mono', monospace;
+}
+/* ── Reset ── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+button { cursor: pointer; border: none; background: none; font: inherit; }
+img    { display: block; }
+.hidden { display: none !important; }
+.font-jp   { font-family: var(--font-jp); }
+.font-mono { font-family: var(--font-mono); }
+
+/* ── Base ── */
+html { background: var(--bg); color: var(--text-primary); scroll-behavior: smooth; }
+body {
+  min-height: 100vh;
+  font-family: var(--font-sans);
+  background: var(--bg);
+  overflow-x: hidden;
+}
+/* Horizontal stripe bands — Pokéball arc texture */
+body::before {
+  content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+  background-image:
+    repeating-linear-gradient(
+      180deg,
+      transparent 0px, transparent 62px,
+      rgba(48,56,65,0.045) 62px, rgba(48,56,65,0.045) 64px
+    );
+}
+/* Corner Pokéball arc watermarks */
+body::after {
+  content: ''; position: fixed;
+  bottom: -110px; right: -110px;
+  width: 420px; height: 420px;
+  border-radius: 50%;
+  border: 52px solid rgba(215,35,35,0.055);
+  pointer-events: none; z-index: 0;
+  box-shadow: inset 0 0 0 52px rgba(48,56,65,0.025);
+}
+body > * { position: relative; z-index: 1; }
+/* Second corner arc (top-left, gray) */
+.pb-corner-tl {
+  position: fixed; top: -80px; left: -80px;
+  width: 280px; height: 280px; border-radius: 50%;
+  border: 36px solid rgba(48,56,65,0.045);
+  pointer-events: none; z-index: 0;
+}
+
+/* ── Animations ── */
+@keyframes fadeSlideUp  { from{opacity:0;transform:translateY(14px)} to{opacity:1;transform:translateY(0)} }
+@keyframes fadeSlideIn  { from{opacity:0;transform:translateX(-10px)} to{opacity:1;transform:translateX(0)} }
+@keyframes fadeIn       { from{opacity:0} to{opacity:1} }
+@keyframes morphScale   { from{opacity:0;transform:scale(0.96) translateY(8px)} to{opacity:1;transform:scale(1) translateY(0)} }
+@keyframes shimmerPulse { 0%{background-position:-200% 0} 100%{background-position:200% 0} }
+@keyframes spin         { to{transform:rotate(360deg)} }
+@keyframes popIn        { from{opacity:0;transform:scale(0.7)} to{opacity:1;transform:scale(1)} }
+@keyframes redPulse     { 0%,100%{box-shadow:0 0 0 0 rgba(215,35,35,0)} 50%{box-shadow:0 0 0 6px rgba(215,35,35,0.15)} }
+@keyframes suitFloat    { 0%,100%{transform:translateY(0) rotate(-4deg)} 50%{transform:translateY(-6px) rotate(-4deg)} }
+@keyframes pokeball-glow {
+  0%,100% { box-shadow: 0 0 0 3px rgba(48,56,65,0.18), 0 2px 10px rgba(48,56,65,0.2); }
+  50%     { box-shadow: 0 0 0 5px rgba(215,35,35,0.25), 0 4px 18px rgba(215,35,35,0.2); }
+}
+@keyframes pokeball-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+.anim-fade-up   { animation: fadeSlideUp 0.4s cubic-bezier(0.22,1,0.36,1) forwards; opacity:0; }
+.anim-morph     { animation: morphScale  0.4s cubic-bezier(0.22,1,0.36,1) forwards; opacity:0; }
+.anim-fade-in   { animation: fadeIn 0.3s ease forwards; }
+.spin           { animation: spin 1s linear infinite; }
+
+.stagger>* { animation: morphScale 0.4s cubic-bezier(0.22,1,0.36,1) forwards; opacity:0; }
+.stagger>*:nth-child(1){animation-delay:0ms}
+.stagger>*:nth-child(2){animation-delay:40ms}
+.stagger>*:nth-child(3){animation-delay:80ms}
+.stagger>*:nth-child(4){animation-delay:120ms}
+.stagger>*:nth-child(5){animation-delay:160ms}
+.stagger>*:nth-child(6){animation-delay:200ms}
+.stagger>*:nth-child(7){animation-delay:240ms}
+.stagger>*:nth-child(8){animation-delay:280ms}
+.stagger>*:nth-child(n+9){animation-delay:320ms}
+
+/* ── Skeleton ── */
+.skeleton {
+  background: linear-gradient(90deg, var(--bg-raised) 25%, #D8D8D8 50%, var(--bg-raised) 75%);
+  background-size: 200% 100%; animation: shimmerPulse 1.4s ease infinite; border-radius: 4px;
+}
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: var(--bg-raised); }
+::-webkit-scrollbar-thumb { background: rgba(48,56,65,0.25); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--red); }
+
+/* ── Buttons ── */
+.btn-gold {
+  background: var(--red);
+  color: #fff; font-weight: 600; font-family: var(--font-sans);
+  border-radius: 0.5rem; padding: 0.6rem 1.25rem; font-size: 0.8rem;
+  letter-spacing: 0.04em; transition: background 0.18s, transform 0.14s, box-shadow 0.18s;
+  box-shadow: 0 2px 8px rgba(215,35,35,0.3);
+}
+.btn-gold:hover { background: #B81E1E; transform: translateY(-1px); box-shadow: 0 4px 16px rgba(215,35,35,0.4); }
+.btn-gold:active { transform: translateY(0); box-shadow: none; }
+.btn-gold:disabled { opacity: 0.4; cursor: not-allowed; transform: none !important; box-shadow: none !important; }
+
+.btn-ghost {
+  background: transparent; border: 1.5px solid var(--border-mid); color: var(--text-secondary);
+  border-radius: 0.5rem; padding: 0.5rem 1rem; font-size: 0.8rem;
+  transition: border-color 0.18s, color 0.18s, background 0.18s;
+}
+.btn-ghost:hover { border-color: var(--dark); color: var(--dark); background: rgba(48,56,65,0.04); }
+
+.btn-blue {
+  background: rgba(48,56,65,0.08); color: var(--dark-2);
+  border: 1.5px solid var(--border-mid); border-radius: 0.5rem;
+  padding: 0.6rem 1.25rem; font-size: 0.8rem; font-weight: 500;
+  transition: background 0.18s, border-color 0.18s;
+}
+.btn-blue:hover { background: rgba(48,56,65,0.14); border-color: var(--border-bright); }
+.btn-blue:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* ── Surface card ── */
+.gold-card {
+  border: 1.5px solid var(--border-subtle); background: var(--surface);
+  border-radius: 0.75rem; box-shadow: var(--shadow-sm);
+  transition: border-color 0.2s, box-shadow 0.2s, transform 0.15s;
+}
+.gold-card:hover {
+  border-color: var(--border-mid);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
+}
+
+/* ── Input ── */
+.input-gold {
+  width: 100%; background: var(--surface); border: 1.5px solid var(--border-mid);
+  color: var(--text-primary); outline: none; border-radius: 0.5rem;
+  padding: 0.75rem 1rem; font-size: 1rem; font-family: var(--font-sans);
+  transition: border-color 0.18s, box-shadow 0.18s;
+  box-shadow: var(--shadow-sm);
+}
+.input-gold::placeholder { color: var(--text-secondary); }
+.input-gold:focus { border-color: var(--red); box-shadow: 0 0 0 3px rgba(215,35,35,0.12); }
+
+/* ── Cost dot ── */
+.cost-dot {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 18px; height: 18px; border-radius: 50%; font-size: 9px; font-weight: 700;
+  flex-shrink: 0; font-family: var(--font-mono);
+}
+
+/* ═══ HEADER — Pokéball top hemisphere ═══ */
+.site-header {
+  padding: 0;
+  background: var(--red);
+  border-bottom: none;
+  box-shadow: none;
+  position: relative;
+}
+/* Subtle horizontal stripe pattern on header (pokeball lines) */
+.site-header::before {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background-image: repeating-linear-gradient(
+    180deg,
+    transparent 0px, transparent 20px,
+    rgba(0,0,0,0.04) 20px, rgba(0,0,0,0.04) 21px
+  );
+}
+.header-inner {
+  max-width: 1400px; margin: 0 auto; padding: 0 1.5rem;
+  display: flex; align-items: center; justify-content: space-between;
+  height: 64px; position: relative; z-index: 1;
+}
+.header-logo {
+  display: flex; align-items: center; gap: 0.875rem;
+}
+/* CSS Pokéball icon */
+.header-pokeball-icon {
+  width: 28px; height: 28px; border-radius: 50%; flex-shrink: 0;
+  background: linear-gradient(180deg, #FFFFFF 49%, var(--dark) 51%);
+  border: 2.5px solid rgba(255,255,255,0.85);
+  position: relative;
+}
+.header-pokeball-icon::before {
+  content: ''; position: absolute;
+  top: 50%; left: -2.5px; right: -2.5px; height: 2.5px;
+  background: rgba(255,255,255,0.85);
+  transform: translateY(-50%); z-index: 1;
+}
+.header-pokeball-icon::after {
+  content: ''; position: absolute;
+  width: 9px; height: 9px; border-radius: 50%;
+  background: var(--red); border: 2px solid rgba(255,255,255,0.9);
+  top: 50%; left: 50%; transform: translate(-50%,-50%); z-index: 2;
+}
+.header-title {
+  font-family: var(--font-serif); font-weight: 700; font-size: 1.65rem;
+  color: #FFFFFF; letter-spacing: 0.02em; line-height: 1;
+  text-shadow: 0 1px 6px rgba(0,0,0,0.15);
+}
+.header-suit { display: none; } /* replaced by .header-pokeball-icon */
+.header-right {
+  display: flex; align-items: center; gap: 1rem;
+}
+.header-badge {
+  font-family: var(--font-mono); font-size: 0.62rem; letter-spacing: 0.18em;
+  text-transform: uppercase; color: rgba(255,255,255,0.5);
+}
+.header-divider { display: none; }
+.header-topline { display: none; }
+.header-subtitle {
+  font-family: var(--font-jp); font-size: 0.85rem; letter-spacing: 0.3em;
+  color: rgba(255,255,255,0.7);
+}
+
+/* ═══ POKÉBALL EQUATOR ═══ */
+.pb-equator {
+  background: var(--dark);
+  height: 18px;
+  display: flex; align-items: center; justify-content: center;
+  position: relative; z-index: 1;
+  /* Red stripe above & below the dark band */
+  border-top: 2px solid rgba(215,35,35,0.35);
+  border-bottom: 2px solid rgba(215,35,35,0.35);
+}
+.pb-btn {
+  width: 34px; height: 34px; border-radius: 50%;
+  background: var(--bg);
+  border: 4px solid var(--dark);
+  position: absolute;
+  top: 50%; left: 50%; transform: translate(-50%, -50%);
+  z-index: 2;
+  animation: pokeball-glow 3s ease-in-out infinite;
+  cursor: default;
+}
+.pb-btn::after {
+  content: ''; position: absolute;
+  inset: 6px; border-radius: 50%;
+  background: rgba(215,35,35,0.12);
+}
+
+/* ═══ PAGE WRAPPER — search + content share one column ═══ */
+.page-wrapper {
+  max-width: 1400px; margin: 0 auto; padding: 1.5rem 1.5rem 4rem;
+  display: flex; gap: 1.5rem; align-items: flex-start;
+}
+.main-col { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1rem; }
+
+/* Deck column */
+.deck-col {
+  width: 288px; flex-shrink: 0;
+  position: sticky; top: 1.5rem;
+  max-height: calc(100vh - 3rem); overflow-y: auto;
+}
+@media (max-width: 960px) {
+  .page-wrapper { flex-direction: column; padding: 1rem; }
+  .deck-col { width: 100%; position: static; max-height: none; }
+}
+
+/* Legacy classes — app-body is gone; results-col is now a normal block */
+.app-body { display: contents; }
+.results-col { display: flex; flex-direction: column; gap: 0.75rem; }
+
+/* ═══ SEARCH ═══ */
+.search-section {
+  width: 100%;
+  background: var(--surface);
+  border: 1.5px solid var(--border-subtle);
+  border-top: 3px solid var(--red); /* pokeball red accent */
+  border-radius: 0.875rem;
+  padding: 1rem 1.25rem 0.875rem;
+  box-shadow: var(--shadow-sm);
+  position: relative;
+}
+/* Gray stripe inside search section */
+.search-section::before {
+  content: ''; position: absolute;
+  top: 0; left: 1.5rem; right: 1.5rem; height: 1px;
+  background: rgba(215,35,35,0.12);
+  pointer-events: none;
+}
+.search-row { display: flex; gap: 0.5rem; }
+.search-row input { flex: 1; }
+.search-btn {
+  flex-shrink: 0; width: 46px; height: 46px; padding: 0;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 0.5rem; font-size: 1.1rem;
+}
+.examples { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid var(--border-subtle); }
+.example-label { font-size: 0.7rem; color: var(--text-secondary); font-family: var(--font-mono); margin-right: 0.2rem; }
+.chip {
+  display: flex; align-items: center; gap: 0.3rem; padding: 0.25rem 0.7rem;
+  border-radius: 999px; font-size: 0.7rem; font-family: var(--font-sans);
+  background: var(--bg-raised); border: 1.5px solid var(--border-subtle);
+  color: var(--text-secondary); transition: all 0.15s; font-weight: 500;
+}
+.chip:hover { border-color: var(--red); color: var(--red); background: var(--red-pale); }
+.chip .jp { font-family: var(--font-jp); font-size: 0.6rem; opacity: 0.6; }
+
+/* ═══ ERROR BANNER ═══ */
+.error-banner {
+  border-radius: 0.5rem; padding: 0.75rem 1rem;
+  display: flex; align-items: center; gap: 0.75rem;
+  font-size: 0.875rem; background: rgba(215,35,35,0.08);
+  border: 1.5px solid rgba(215,35,35,0.25); color: var(--red);
+  animation: fadeIn 0.3s ease;
+}
+.error-banner button { margin-left: auto; opacity: 0.6; }
+.error-banner button:hover { opacity: 1; }
+
+/* ═══ SPINNER ═══ */
+.spinner-wrap { display: flex; flex-direction: column; align-items: center; gap: 1rem; padding: 3rem 0; }
+.spinner { width: 2rem; height: 2rem; border-radius: 50%; border: 2px solid var(--border-mid); border-top-color: var(--red); animation: spin 1s linear infinite; }
+.spinner-text { font-size: 0.75rem; font-family: var(--font-mono); color: var(--text-secondary); }
+
+/* ═══ CARD GRID ═══ */
+.results-header { font-size: 0.7rem; font-family: var(--font-mono); color: var(--text-secondary); margin-bottom: 0.75rem; }
+.results-header span { color: var(--dark-2); margin-left: 0.5rem; }
+.card-grid { display: grid; grid-template-columns: repeat(2,1fr); gap: 0.875rem; }
+@media(min-width:600px)  { .card-grid { grid-template-columns: repeat(3,1fr); } }
+@media(min-width:1024px) { .card-grid { grid-template-columns: repeat(4,1fr); } }
+
+.card-thumb {
+  text-align: left; border-radius: 0.75rem; overflow: hidden; width: 100%;
+  background: #3A4750; border: 1.5px solid var(--border-subtle);
+  transform-style: preserve-3d;
+  transition: border-color 0.2s, box-shadow 0.2s, transform 0.18s;
+  box-shadow: var(--shadow-sm);
+}
+/* card-clickable fills the card image + info area, passes hover to parent */
+.card-clickable { display: block; width: 100%; background: none; border: none; cursor: pointer; text-align: left; padding: 0; }
+.card-thumb:hover {
+  border-color: var(--red); transform: translateY(-4px) scale(1.01);
+  box-shadow: 0 8px 28px rgba(215,35,35,0.14), var(--shadow-md);
+}
+.card-thumb-img {
+  aspect-ratio: 2.5/3.5;
+  background: #3A4750; /* dark slate — card image pops against it */
+  display: flex; align-items: center; justify-content: center; overflow: hidden; position: relative;
+}
+/* Red stripe at top of card image (pokeball accent) */
+.card-thumb-img::before {
+  content: ''; position: absolute;
+  top: 0; left: 0; right: 0; height: 3px;
+  background: var(--red); z-index: 2;
+  transform: scaleX(0); transform-origin: left;
+  transition: transform 0.25s cubic-bezier(0.22,1,0.36,1);
+}
+.card-thumb:hover .card-thumb-img::before { transform: scaleX(1); }
+.card-thumb-img img { width: 100%; height: 100%; object-fit: contain; padding: 0.35rem; }
+/* No-image placeholder */
+.card-thumb-img .no-img {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 0.4rem; width: 100%; height: 100%;
+  background: #3A4750;
+}
+.card-thumb-img .no-img span { font-size: 2.25rem; }
+.card-thumb-img .no-img::after {
+  content: 'No image'; font-size: 0.6rem; font-family: var(--font-mono);
+  letter-spacing: 0.1em; text-transform: uppercase;
+  color: rgba(238,238,238,0.45);
+}
+.card-thumb-info { padding: 0.6rem 0.75rem 0.7rem; border-top: none; background: #FFFFFF; }
+.card-thumb-name { font-size: 0.78rem; font-weight: 600; color: var(--text-primary); margin-bottom: 0.12rem; line-height: 1.3; font-family: var(--font-sans); }
+.card-thumb-name.jp { font-family: var(--font-jp); }
+.card-thumb-sub { font-size: 0.65rem; font-family: var(--font-mono); color: var(--text-secondary); display: flex; align-items: center; gap: 0.4rem; }
+
+/* JP Only badge */
+.badge-jp {
+  display: inline-block; padding: 0.1rem 0.4rem; border-radius: 0.2rem;
+  font-size: 0.58rem; font-family: var(--font-mono); letter-spacing: 0.06em;
+  background: var(--red-pale); color: var(--red); border: 1px solid rgba(215,35,35,0.25);
+}
+
+/* Skeleton card */
+.skel-card { border-radius: 0.75rem; overflow: hidden; background: var(--surface); border: 1.5px solid var(--border-subtle); box-shadow: var(--shadow-sm); }
+.skel-img  { aspect-ratio: 2.5/3.5; }
+.skel-l1   { height: 0.75rem; margin: 0.6rem 0.75rem 0; }
+.skel-l2   { height: 0.6rem; width: 50%; margin: 0.35rem 0.75rem 0.75rem; }
+
+/* ═══ EMPTY / NO-RESULTS ═══ */
+.empty-state { display: flex; flex-direction: column; align-items: center; gap: 1.25rem; padding: 3rem 1rem; text-align: center; }
+.empty-icon {
+  width: 4rem; height: 4rem; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center; font-size: 2rem;
+  background: var(--surface); border: 1.5px solid var(--border-mid); box-shadow: var(--shadow-sm);
+}
+.empty-title { font-family: var(--font-serif); font-size: 1.2rem; color: var(--text-primary); font-weight: 600; }
+.empty-desc  { font-size: 0.8rem; color: var(--text-secondary); max-width: 22rem; line-height: 1.6; }
+.feature-hints { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.6rem; margin-top: 0.5rem; }
+.hint-chip {
+  display: flex; flex-direction: column; align-items: center; gap: 0.3rem;
+  padding: 0.75rem 1rem; border-radius: 0.625rem; min-width: 112px;
+  background: var(--surface); border: 1.5px solid var(--border-subtle); box-shadow: var(--shadow-sm);
+}
+.hint-chip-icon  { font-size: 1.2rem; }
+.hint-chip-title { font-size: 0.68rem; font-family: var(--font-mono); color: var(--red); font-weight: 500; }
+.hint-chip-desc  { font-size: 0.67rem; color: var(--text-secondary); text-align: center; line-height: 1.4; }
+
+/* ═══ DECK PANEL ═══ */
+.deck-panel {
+  background: var(--surface); border: 1.5px solid var(--border-mid);
+  border-radius: 0.875rem; overflow: hidden; box-shadow: var(--shadow-md);
+  border-top: 3px solid var(--red); /* pokeball red top stripe */
+}
+.deck-header {
+  padding: 0.875rem 1rem; background: var(--dark);
+  display: flex; align-items: center; justify-content: space-between;
+  position: relative;
+}
+/* Gray stripe decoration across deck header */
+.deck-header::before {
+  content: ''; position: absolute;
+  left: 0; right: 0; bottom: 0; height: 2px;
+  background: linear-gradient(90deg, var(--red) 0%, rgba(215,35,35,0.2) 60%, transparent 100%);
+}
+.deck-title { font-family: var(--font-sans); font-size: 0.75rem; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: #EEEEEE; }
+.deck-count {
+  font-family: var(--font-mono); font-size: 0.72rem; padding: 0.15rem 0.55rem;
+  border-radius: 999px; background: rgba(238,238,238,0.12);
+  border: 1px solid rgba(238,238,238,0.2); color: #EEEEEE;
+}
+.deck-count.full { background: rgba(215,35,35,0.3); border-color: rgba(215,35,35,0.5); color: #fff; }
+
+/* Deck tabs */
+.deck-tabs { display: flex; border-bottom: 1.5px solid var(--border-subtle); }
+.deck-tab {
+  flex: 1; padding: 0.5rem; font-size: 0.7rem; font-family: var(--font-sans);
+  font-weight: 500; letter-spacing: 0.04em; color: var(--text-secondary);
+  transition: all 0.15s; border-bottom: 2.5px solid transparent;
+}
+.deck-tab.active { color: var(--red); border-bottom-color: var(--red); }
+.deck-tab:hover:not(.active) { color: var(--dark); }
+
+.deck-list { padding: 0.5rem; display: flex; flex-direction: column; gap: 0.3rem; min-height: 110px; max-height: 400px; overflow-y: auto; }
+.deck-empty { display: flex; flex-direction: column; align-items: center; gap: 0.5rem; padding: 2rem 0.5rem; text-align: center; opacity: 0.4; }
+.deck-empty-icon  { font-size: 1.4rem; }
+.deck-empty-text  { font-size: 0.72rem; color: var(--text-secondary); font-family: var(--font-mono); }
+
+.deck-entry {
+  display: flex; align-items: center; gap: 0.5rem;
+  padding: 0.4rem 0.5rem; border-radius: 0.5rem;
+  background: var(--surface-alt); border: 1.5px solid var(--border-subtle);
+  transition: border-color 0.15s;
+}
+.deck-entry:hover { border-color: var(--border-mid); }
+.deck-entry-img { width: 30px; height: 42px; object-fit: contain; border-radius: 0.2rem; flex-shrink: 0; background: var(--bg-raised); }
+.deck-entry-img-placeholder { width: 30px; height: 42px; flex-shrink: 0; background: var(--bg-raised); border-radius: 0.2rem; display: flex; align-items: center; justify-content: center; font-size: 0.85rem; opacity: 0.3; }
+.deck-entry-info { flex: 1; min-width: 0; }
+.deck-entry-name { font-size: 0.7rem; font-weight: 500; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.3; }
+.deck-entry-meta { font-size: 0.6rem; font-family: var(--font-mono); color: var(--text-secondary); }
+.deck-entry-qty { font-family: var(--font-mono); font-size: 0.68rem; font-weight: 600; color: var(--red); flex-shrink: 0; min-width: 1.5rem; text-align: center; }
+.deck-entry-rm { flex-shrink: 0; opacity: 0.35; font-size: 0.7rem; padding: 0.15rem 0.3rem; border-radius: 0.25rem; color: var(--text-secondary); transition: opacity 0.15s, color 0.15s; }
+.deck-entry-rm:hover { opacity: 1; color: var(--red); }
+
+.deck-footer { padding: 0.75rem 1rem; border-top: 1.5px solid var(--border-subtle); display: flex; flex-direction: column; gap: 0.5rem; }
+.deck-progress { height: 3px; border-radius: 999px; background: var(--bg-raised); overflow: hidden; }
+.deck-progress-fill { height: 100%; background: var(--red); border-radius: 999px; transition: width 0.3s ease; }
+.deck-stats { font-size: 0.65rem; font-family: var(--font-mono); color: var(--text-secondary); display: flex; justify-content: space-between; }
+
+/* ═══ MODAL ═══ */
+.modal-overlay {
+  position: fixed; inset: 0; z-index: 1000;
+  background: rgba(48,56,65,0.55); backdrop-filter: blur(8px);
+  display: flex; align-items: flex-start; justify-content: center;
+  padding: 1.5rem 1rem; overflow-y: auto;
+  animation: fadeIn 0.2s ease;
+}
+.modal-box {
+  width: 100%; max-width: 860px; border-radius: 1rem; overflow: hidden;
+  background: var(--surface); border: 1.5px solid var(--border-mid);
+  border-top: 3px solid var(--red); /* pokeball stripe */
+  box-shadow: 0 24px 80px rgba(48,56,65,0.3);
+  animation: morphScale 0.3s cubic-bezier(0.22,1,0.36,1) forwards; opacity: 0;
+  margin: auto;
+}
+.modal-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 1rem 1.25rem; border-bottom: 2px solid rgba(215,35,35,0.3);
+  background: var(--dark);
+}
+.modal-title-area { display: flex; align-items: center; gap: 0.75rem; }
+.modal-card-id { font-size: 0.68rem; font-family: var(--font-mono); color: rgba(238,238,238,0.5); }
+.modal-close { font-size: 1.1rem; opacity: 0.5; padding: 0.25rem 0.5rem; border-radius: 0.3rem; color: #eee; transition: opacity 0.15s; }
+.modal-close:hover { opacity: 1; }
+.modal-body { padding: 1.25rem; }
+.modal-grid { display: grid; grid-template-columns: 1fr; gap: 1.25rem; }
+@media(min-width:600px){ .modal-grid { grid-template-columns: 220px 1fr; } }
+
+/* Modal image */
+.modal-img-col { display: flex; flex-direction: column; align-items: center; gap: 0.75rem; }
+.modal-card-img {
+  width: 200px; aspect-ratio: 2.5/3.5; border-radius: 0.75rem; overflow: hidden;
+  background: var(--bg-raised); border: 1.5px solid var(--border-mid);
+  box-shadow: var(--shadow-lg);
+  display: flex; align-items: center; justify-content: center;
+}
+.modal-card-img img { width: 100%; height: 100%; object-fit: contain; padding: 0.5rem; }
+
+/* Modal meta */
+.modal-meta { background: var(--surface-alt); border: 1.5px solid var(--border-subtle); border-radius: 0.5rem; overflow: hidden; width: 100%; }
+.modal-meta-row { display: flex; justify-content: space-between; padding: 0.35rem 0.75rem; font-size: 0.68rem; font-family: var(--font-mono); }
+.modal-meta-row + .modal-meta-row { border-top: 1px solid var(--border-subtle); }
+.mml { color: var(--text-secondary); }
+.mmv { color: var(--text-primary); text-align: right; max-width: 55%; }
+.mmv.gold { color: var(--red); }
+
+/* Modal action buttons */
+.modal-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+.deck-add-feedback {
+  font-size: 0.68rem; font-family: var(--font-mono); text-align: center;
+  padding: 0.4rem; border-radius: 0.4rem; animation: popIn 0.2s ease;
+}
+.deck-add-feedback.ok      { background: var(--red-pale); color: var(--red); }
+.deck-add-feedback.denied  { background: rgba(215,35,35,0.12); color: var(--red-dim); }
+.deck-add-feedback.box-ok  { background: rgba(48,56,65,0.08); color: var(--dark); }
+
+/* Modal detail */
+.modal-right { display: flex; flex-direction: column; gap: 1rem; }
+.name-box {
+  border-radius: 0.625rem; padding: 1.25rem;
+  background: var(--surface-alt); border: 1.5px solid var(--border-mid);
+}
+.name-box-tags { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem; flex-wrap: wrap; }
+.cat-badge {
+  padding: 0.1rem 0.45rem; border-radius: 0.2rem; font-size: 0.65rem; font-family: var(--font-mono);
+  background: var(--red-pale); color: var(--red); border: 1px solid rgba(215,35,35,0.2);
+}
+.name-pair { display: flex; align-items: flex-end; gap: 0.75rem; flex-wrap: wrap; }
+.name-item .lbl { font-size: 0.65rem; font-family: var(--font-mono); color: var(--text-secondary); margin-bottom: 0.2rem; letter-spacing: 0.08em; }
+.name-ja { font-family: var(--font-jp); font-size: 1.7rem; color: var(--text-primary); }
+.name-en { font-family: var(--font-serif); font-size: 1.7rem; color: var(--text-primary); font-weight: 600; }
+.name-arrow { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 0.3rem; }
+.stats-row { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.875rem; align-items: center; }
+.type-badge { display: inline-block; padding: 0.2rem 0.65rem; border-radius: 999px; font-family: var(--font-mono); font-weight: 500; letter-spacing: 0.04em; font-size: 0.75rem; }
+.type-badge.sm { padding: 0.1rem 0.45rem; font-size: 0.68rem; }
+.hp-chip { display: flex; align-items: center; gap: 0.3rem; padding: 0.2rem 0.65rem; border-radius: 999px; background: var(--bg-raised); border: 1.5px solid var(--border-subtle); }
+.hp-l { font-size: 0.65rem; font-family: var(--font-mono); color: var(--text-secondary); }
+.hp-v { font-family: var(--font-mono); font-weight: 600; font-size: 0.8rem; color: var(--red); }
+.stage-chip { padding: 0.2rem 0.65rem; border-radius: 999px; font-size: 0.68rem; font-family: var(--font-mono); background: var(--bg-raised); border: 1.5px solid var(--border-subtle); color: var(--text-secondary); }
+
+.pokedex-box { border-radius: 0.5rem; padding: 0.875rem; background: var(--surface-alt); border: 1.5px solid var(--border-subtle); }
+.sec-label { font-size: 0.64rem; font-family: var(--font-mono); letter-spacing: 0.14em; text-transform: uppercase; color: var(--red-dim); margin-bottom: 0.5rem; }
+.dex-en { font-size: 0.8rem; line-height: 1.65; font-style: italic; font-family: var(--font-serif); color: var(--text-secondary); }
+.dex-ja { font-size: 0.8rem; line-height: 1.65; font-family: var(--font-jp); color: var(--text-secondary); opacity: 0.65; margin-top: 0.4rem; }
+
+/* ── Trainer card effect ── */
+.trainer-effect-box { border-radius: 0.5rem; padding: 0.875rem; background: var(--surface-alt); border: 1.5px solid var(--border-subtle); }
+.trainer-effect-badge {
+  display: inline-block; margin-bottom: 0.5rem;
+  font-size: 0.6rem; font-family: var(--font-mono); font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.1em;
+  padding: 0.15rem 0.55rem; border-radius: 999px;
+  background: rgba(215,35,35,0.1); color: var(--red); border: 1px solid rgba(215,35,35,0.25);
+}
+.trainer-effect-en { font-size: 0.85rem; line-height: 1.7; color: var(--text-primary); font-family: var(--font-sans); }
+.trainer-effect-ja { font-size: 0.82rem; line-height: 1.7; font-family: var(--font-jp); color: var(--text-secondary); margin-top: 0.625rem; padding-top: 0.625rem; border-top: 1px solid var(--border-subtle); }
+.trainer-effect-ja-lbl { font-size: 0.58rem; font-family: var(--font-mono); text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-secondary); margin-bottom: 0.25rem; opacity: 0.7; }
+
+.attack-row { border-radius: 0.5rem; padding: 0.875rem; background: var(--surface-alt); border: 1.5px solid var(--border-subtle); margin-bottom: 0.5rem; }
+.atk-head { display: flex; align-items: flex-start; gap: 0.625rem; }
+.atk-cost { display: flex; gap: 0.2rem; flex-shrink: 0; padding-top: 0.1rem; }
+.atk-info { flex: 1; }
+.atk-names { display: flex; align-items: baseline; gap: 0.4rem; flex-wrap: wrap; }
+.atk-ja { font-family: var(--font-jp); font-size: 0.9rem; color: var(--text-primary); }
+.atk-en { font-family: var(--font-serif); font-size: 0.9rem; color: var(--text-primary); font-weight: 600; }
+.atk-arrow { font-size: 0.65rem; color: var(--text-secondary); }
+.atk-dmg { font-family: var(--font-mono); font-size: 0.78rem; font-weight: 600; color: var(--red); margin-top: 0.1rem; }
+.atk-effects { padding-left: 1.5rem; margin-top: 0.6rem; display: flex; flex-direction: column; gap: 0.35rem; }
+.eff-box { border-radius: 0.25rem; padding: 0.5rem 0.625rem; font-size: 0.78rem; line-height: 1.6; }
+.eff-box.en { background: rgba(48,56,65,0.04); border: 1px solid var(--border-subtle); }
+.eff-box.ja { background: rgba(215,35,35,0.04); border: 1px solid rgba(215,35,35,0.1); }
+.eff-lang { font-size: 0.65rem; font-family: var(--font-mono); margin-right: 0.4rem; }
+.eff-lang.en { color: var(--dark-2); }
+.eff-lang.ja { color: var(--red-dim); }
+
+.ability-row { border-radius: 0.5rem; padding: 0.875rem; background: rgba(215,35,35,0.04); border: 1.5px solid rgba(215,35,35,0.15); margin-bottom: 0.5rem; }
+.ab-head { display: flex; align-items: center; gap: 0.4rem; margin-bottom: 0.4rem; flex-wrap: wrap; }
+.ab-type { padding: 0.1rem 0.4rem; border-radius: 0.2rem; font-size: 0.65rem; font-family: var(--font-mono); background: var(--red-pale); color: var(--red); border: 1px solid rgba(215,35,35,0.25); }
+.ab-names { display: flex; align-items: baseline; gap: 0.4rem; }
+.ab-ja { font-family: var(--font-jp); font-size: 0.8rem; color: var(--text-secondary); }
+.ab-en { font-family: var(--font-serif); font-size: 0.9rem; color: var(--text-primary); font-weight: 600; }
+.ab-eff { font-size: 0.78rem; line-height: 1.6; color: var(--text-secondary); padding-left: 0.25rem; }
+
+.wwr-grid { border-radius: 0.5rem; padding: 0.875rem; background: var(--surface-alt); border: 1.5px solid var(--border-subtle); display: grid; grid-template-columns: repeat(3,1fr); gap: 0.75rem; text-align: center; }
+.wwr-lbl { font-size: 0.64rem; font-family: var(--font-mono); color: var(--text-secondary); margin-bottom: 0.4rem; text-transform: uppercase; letter-spacing: 0.08em; }
+.wwr-val { display: flex; align-items: center; justify-content: center; gap: 0.2rem; flex-wrap: wrap; }
+.wwr-none { font-size: 0.78rem; color: var(--text-secondary); }
+
+.notice { border-radius: 0.5rem; padding: 0.875rem; display: flex; gap: 0.625rem; align-items: flex-start; }
+.notice.approx  { background: rgba(48,56,65,0.05); border: 1.5px solid var(--border-mid); }
+.notice.ja-only { background: var(--red-pale); border: 1.5px solid rgba(215,35,35,0.2); }
+.n-icon { font-size: 1.1rem; flex-shrink: 0; }
+.n-title { font-size: 0.78rem; font-weight: 600; margin-bottom: 0.2rem; }
+.notice.approx  .n-title { color: var(--dark); }
+.notice.ja-only .n-title { color: var(--red); }
+.n-desc { font-size: 0.7rem; color: var(--text-secondary); line-height: 1.55; }
+
+/* ═══ CAMERA SCANNER ═══ */
+.scanner-wrap { border-radius: 0.75rem; overflow: hidden; background: var(--surface); border: 1.5px solid var(--border-mid); box-shadow: var(--shadow-sm); }
+.scanner-header { display: flex; align-items: center; justify-content: space-between; padding: 0.75rem 1rem; border-bottom: 1.5px solid var(--border-subtle); background: var(--surface-alt); }
+.scanner-title { font-size: 0.75rem; font-family: var(--font-mono); color: var(--dark); font-weight: 500; }
+.scanner-body { padding: 1rem; display: flex; flex-direction: column; gap: 0.875rem; }
+.scan-vp { position: relative; border-radius: 0.5rem; overflow: hidden; background: var(--bg-raised); border: 1.5px solid var(--border-subtle); min-height: 200px; aspect-ratio: 16/9; display: flex; align-items: center; justify-content: center; }
+.scan-vp video, .scan-vp canvas { width: 100%; height: 100%; object-fit: cover; display: none; }
+.scan-vp canvas { object-fit: contain; }
+.scan-idle-ui { display: flex; flex-direction: column; align-items: center; gap: 0.6rem; text-align: center; padding: 1.25rem; }
+.scan-spinner-ui { display: flex; flex-direction: column; align-items: center; gap: 0.6rem; }
+.scan-processing-ui { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.6rem; background: rgba(238,238,238,0.9); }
+.scan-proc-text { font-size: 0.78rem; color: var(--red); }
+.scan-prog-bar { width: 10rem; height: 3px; border-radius: 999px; background: var(--bg-raised); overflow: hidden; }
+.scan-prog-fill { height: 100%; background: var(--red); border-radius: 999px; transition: width 0.2s; }
+.scan-live-overlay { position: absolute; inset: 0; pointer-events: none; background: linear-gradient(to bottom, rgba(238,238,238,0.15) 0%, transparent 25%, transparent 75%, rgba(238,238,238,0.15) 100%); }
+.scan-corner { position: absolute; width: 1.25rem; height: 1.25rem; }
+.scan-align { position: absolute; font-size: 0.65rem; letter-spacing: 0.12em; color: var(--red); opacity: 0.8; left: 50%; transform: translateX(-50%); top: calc(20% - 18px); white-space: nowrap; font-family: var(--font-mono); }
+.scan-error-ui { display: flex; flex-direction: column; align-items: center; gap: 0.6rem; text-align: center; padding: 1.25rem; }
+.scan-error-text { font-size: 0.78rem; color: var(--red); }
+.scan-result-box { border-radius: 0.5rem; padding: 0.875rem; background: var(--surface-alt); border: 1.5px solid var(--border-mid); animation: fadeIn 0.3s ease; }
+.scan-result-lbl { font-size: 0.64rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--red-dim); margin-bottom: 0.4rem; font-family: var(--font-mono); }
+.scan-result-text { font-family: var(--font-jp); font-size: 1.1rem; color: var(--text-primary); margin-bottom: 0.35rem; }
+.scan-result-hint { font-size: 0.68rem; color: var(--text-secondary); }
+.scan-controls { display: flex; gap: 0.4rem; }
+.scan-hint { text-align: center; font-size: 0.68rem; color: var(--text-secondary); }
+
+/* Mode tabs */
+.mode-tabs {
+  display: flex; border-radius: 0.5rem; padding: 0.2rem; gap: 0.2rem;
+  background: var(--bg-raised); border: 1.5px solid var(--border-subtle);
+  margin-bottom: 0.875rem;
+}
+.mode-tab {
+  flex: 1; padding: 0.45rem; border-radius: 0.3rem; font-size: 0.78rem;
+  font-family: var(--font-sans); font-weight: 500; letter-spacing: 0.02em;
+  transition: all 0.18s; border: 1.5px solid transparent; color: var(--text-secondary);
+}
+.mode-tab.active { background: var(--surface); color: var(--dark); border-color: var(--border-mid); box-shadow: var(--shadow-sm); }
+.mode-tab:hover:not(.active) { color: var(--dark); }
+
+footer {
+  margin-top: 2rem; text-align: center; font-size: 0.65rem; font-family: var(--font-mono);
+  padding: 1.25rem; color: var(--text-secondary); opacity: 0.5;
+  border-top: 1px solid var(--border-subtle); background: var(--surface);
+}
+
+/* ═══ QTY CONTROLS ═══ */
+.card-clickable {
+  display: block; width: 100%; background: none; border: none;
+  cursor: pointer; text-align: left; padding: 0;
+}
+.card-qty-row {
+  display: flex; align-items: center; justify-content: space-around;
+  padding: 0.35rem 0.5rem; background: #FFFFFF;
+  border-top: 1px solid var(--border-subtle); gap: 0.25rem;
+}
+.qty-section { display: flex; align-items: center; gap: 0.3rem; }
+.qty-lbl {
+  font-size: 0.55rem; font-family: var(--font-mono); color: var(--text-secondary);
+  text-transform: uppercase; letter-spacing: 0.06em;
+}
+.qty-ctrl {
+  display: flex; align-items: stretch; height: 22px;
+  background: var(--bg-raised); border: 1px solid var(--border-mid);
+  border-radius: 0.3rem; overflow: hidden;
+}
+.qty-btn {
+  width: 22px; font-size: 1rem; display: flex; align-items: center; justify-content: center;
+  color: var(--text-secondary); transition: background 0.12s, color 0.12s; line-height: 1;
+}
+.qty-btn:hover { background: var(--red-pale); color: var(--red); }
+.qty-num {
+  min-width: 22px; text-align: center; font-size: 0.68rem; font-family: var(--font-mono);
+  font-weight: 600; color: var(--dark);
+  border-left: 1px solid var(--border-mid); border-right: 1px solid var(--border-mid);
+  display: flex; align-items: center; justify-content: center; padding: 0 2px;
+}
+.qty-num.has-qty { color: var(--red); }
+
+/* Deck panel qty controls */
+.deck-qty-ctrl { display: flex; align-items: center; gap: 0.1rem; flex-shrink: 0; }
+.deck-qty-btn {
+  width: 20px; height: 20px; font-size: 0.9rem; display: flex; align-items: center;
+  justify-content: center; color: var(--text-secondary); border-radius: 0.2rem;
+  transition: color 0.12s, background 0.12s;
+}
+.deck-qty-btn:hover { color: var(--red); background: var(--red-pale); }
+.deck-qty-num {
+  min-width: 20px; text-align: center; font-size: 0.7rem;
+  font-family: var(--font-mono); font-weight: 600; color: var(--red);
+}
+
+/* ═══ DECK BUILDER FULL-PAGE ═══ */
+.builder-page {
+  position: fixed; inset: 0; z-index: 900;
+  background: var(--bg); display: flex; flex-direction: column; overflow: hidden;
+  animation: fadeSlideUp 0.28s cubic-bezier(0.22,1,0.36,1);
+}
+.builder-header {
+  background: var(--dark); padding: 0 1rem; height: 52px;
+  display: flex; align-items: center; gap: 0.625rem;
+  border-bottom: 3px solid var(--red); flex-shrink: 0; overflow: hidden;
+}
+.builder-back {
+  font-size: 0.7rem; font-family: var(--font-mono); color: rgba(238,238,238,0.6);
+  padding: 0.25rem 0.5rem; border-radius: 0.3rem; flex-shrink: 0; transition: color 0.15s;
+}
+.builder-back:hover { color: #fff; }
+.builder-tabs { display: flex; gap: 0.3rem; flex: 1; overflow-x: auto; align-items: center; }
+.builder-tab {
+  padding: 0.18rem 0.65rem; border-radius: 999px; font-size: 0.65rem;
+  border: 1.5px solid rgba(238,238,238,0.18); color: rgba(238,238,238,0.5);
+  white-space: nowrap; flex-shrink: 0; transition: all 0.15s; font-family: var(--font-sans);
+}
+.builder-tab.active { border-color: var(--red); color: #fff; background: rgba(215,35,35,0.22); }
+.builder-tab:hover:not(.active) { border-color: rgba(238,238,238,0.4); color: #fff; }
+.builder-tab-add {
+  padding: 0.18rem 0.55rem; border-radius: 999px; font-size: 0.75rem;
+  border: 1.5px dashed rgba(238,238,238,0.25); color: rgba(238,238,238,0.4);
+  flex-shrink: 0; transition: all 0.15s;
+}
+.builder-tab-add:hover { border-color: rgba(215,35,35,0.6); color: rgba(215,35,35,0.8); }
+.builder-body { flex: 1; display: flex; overflow: hidden; }
+.builder-left {
+  flex: 1; display: flex; flex-direction: column; overflow: hidden;
+  border-right: 2px solid var(--border-mid);
+}
+.builder-right {
+  width: 300px; flex-shrink: 0; display: flex; flex-direction: column; overflow: hidden;
+}
+.builder-col-header {
+  padding: 0.6rem 0.875rem; display: flex; align-items: center; justify-content: space-between;
+  background: var(--surface); border-bottom: 1.5px solid var(--border-subtle); flex-shrink: 0;
+}
+.builder-col-title {
+  font-size: 0.7rem; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.1em; color: var(--dark); font-family: var(--font-sans);
+}
+.builder-col-meta { font-size: 0.62rem; font-family: var(--font-mono); color: var(--text-secondary); }
+.builder-grid {
+  flex: 1; overflow-y: auto; padding: 0.625rem;
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+  gap: 0.45rem; align-content: start;
+}
+.builder-deck-list { flex: 1; overflow-y: auto; padding: 0.375rem; display: flex; flex-direction: column; gap: 0.225rem; }
+.builder-card {
+  border-radius: 0.5rem; overflow: hidden; background: #3A4750;
+  border: 1.5px solid var(--border-subtle); cursor: grab;
+  transition: transform 0.14s, box-shadow 0.14s, border-color 0.14s;
+  user-select: none;
+}
+.builder-card:active { cursor: grabbing; }
+.builder-card.dragging { opacity: 0.4; transform: scale(0.9); }
+.builder-card:hover { border-color: var(--red); transform: translateY(-2px); box-shadow: 0 4px 12px rgba(215,35,35,0.18); }
+.builder-card-img { aspect-ratio: 2.5/3.5; background: #3A4750; overflow: hidden; }
+.builder-card-img img { width: 100%; height: 100%; object-fit: contain; }
+.builder-card-img .no-img { width: 100%; height: 100%; display:flex; align-items:center; justify-content:center; font-size:1.25rem; }
+.builder-card-foot { background: #fff; padding: 0.2rem 0.3rem 0.25rem; }
+.builder-card-name { font-size: 0.56rem; font-weight: 600; color: var(--dark); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.builder-card-meta { font-size: 0.5rem; font-family: var(--font-mono); color: var(--text-secondary); }
+/* "All copies in deck" state — grey out the box card */
+.builder-card.all-used { opacity: 0.45; filter: grayscale(0.6); }
+.builder-card.all-used .builder-card-foot { background: #e8e8e8; }
+.builder-used-badge {
+  position: absolute; bottom: 0; left: 0; right: 0;
+  background: rgba(48,56,65,0.82); color: #fff;
+  font-size: 0.48rem; font-family: var(--font-mono); font-weight: 600;
+  text-align: center; padding: 0.15rem 0; letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+/* Deck panel box tab — used-in-deck row */
+.deck-entry.used-in-deck { opacity: 0.48; }
+.deck-entry.used-in-deck .deck-entry-name { text-decoration: line-through; text-decoration-color: var(--text-secondary); }
+.deck-in-deck-badge {
+  font-size: 0.48rem; font-family: var(--font-mono); font-weight: 600;
+  color: var(--red); text-transform: uppercase; letter-spacing: 0.06em;
+  white-space: nowrap;
+}
+.builder-deck-entry {
+  display: flex; align-items: center; gap: 0.4rem; padding: 0.3rem 0.45rem;
+  border-radius: 0.4rem; background: var(--surface); border: 1.5px solid var(--border-subtle);
+  transition: border-color 0.15s;
+}
+.builder-deck-entry:hover { border-color: var(--border-mid); }
+.builder-deck-entry.drag-over { border-color: var(--red); background: var(--red-pale); }
+.builder-entry-img { width: 26px; height: 36px; object-fit: contain; border-radius: 0.15rem; background: #3A4750; flex-shrink: 0; }
+.builder-entry-img-ph { width: 26px; height: 36px; flex-shrink: 0; background: #3A4750; border-radius: 0.15rem; display: flex; align-items: center; justify-content: center; font-size: 0.7rem; }
+.builder-entry-name { flex: 1; font-size: 0.65rem; font-weight: 500; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.builder-entry-qty { display: flex; align-items: center; gap: 0.1rem; flex-shrink: 0; }
+.builder-entry-btn { width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; font-size: 0.85rem; color: var(--text-secondary); transition: color 0.12s; border-radius: 0.2rem; }
+.builder-entry-btn:hover { color: var(--red); }
+.builder-entry-num { min-width: 18px; text-align: center; font-size: 0.65rem; font-family: var(--font-mono); font-weight: 600; color: var(--red); }
+.builder-drop-hint {
+  margin: 0.5rem; border: 2px dashed var(--border-mid); border-radius: 0.5rem;
+  padding: 2rem 1rem; text-align: center; color: var(--text-secondary);
+  font-size: 0.7rem; font-family: var(--font-mono); transition: border-color 0.2s, background 0.2s;
+}
+.builder-drop-hint.over { border-color: var(--red); background: var(--red-pale); color: var(--red); }
+.builder-name-input {
+  background: transparent; border: none; border-bottom: 1.5px solid var(--border-mid);
+  color: var(--dark); font-family: var(--font-serif); font-size: 0.88rem; font-weight: 600;
+  outline: none; padding: 0 0 0.12rem; width: 160px; transition: border-color 0.15s;
+}
+.builder-name-input:focus { border-bottom-color: var(--red); }
+.builder-footer {
+  padding: 0.5rem 0.875rem; background: var(--surface);
+  border-top: 1.5px solid var(--border-subtle);
+  display: flex; align-items: center; gap: 0.75rem; flex-shrink: 0;
+}
+.builder-prog { flex: 1; height: 4px; border-radius: 999px; background: var(--bg-raised); overflow: hidden; }
+.builder-prog-fill { height: 100%; background: var(--red); border-radius: 999px; transition: width 0.3s ease; }
+
+/* Builder empty state */
+.builder-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.75rem; padding: 3rem 1rem; opacity: 0.5; text-align: center; }
+.builder-empty-icon { font-size: 2rem; }
+.builder-empty-text { font-size: 0.72rem; font-family: var(--font-mono); color: var(--text-secondary); }
+
+/* Toast */
+.cs-toast {
+  position: fixed; bottom: 2rem; left: 50%; transform: translateX(-50%);
+  background: var(--dark); color: #fff; padding: 0.45rem 1.25rem;
+  border-radius: 999px; font-size: 0.7rem; font-family: var(--font-mono);
+  box-shadow: var(--shadow-md); animation: popIn 0.2s ease; z-index: 9999;
+  pointer-events: none; border: 1px solid rgba(215,35,35,0.3);
+  white-space: nowrap;
+}
+
+/* ═══ CARD HOLD PREVIEW POPUP ═══ */
+.card-preview-popup {
+  position: fixed; z-index: 3000; pointer-events: none;
+  width: 210px;
+  background: var(--surface); border: 2px solid var(--border-mid);
+  border-radius: 0.875rem; box-shadow: 0 12px 48px rgba(48,56,65,0.28);
+  padding: 0.625rem; animation: popIn 0.15s cubic-bezier(0.22,1,0.36,1);
+}
+.cpop-img { width: 100%; aspect-ratio: 2.5/3.5; border-radius: 0.5rem; overflow: hidden; background: #3A4750; margin-bottom: 0.5rem; }
+.cpop-img img { width: 100%; height: 100%; object-fit: contain; }
+.cpop-name { font-family: var(--font-serif); font-size: 0.95rem; font-weight: 700; color: var(--dark); line-height: 1.2; }
+.cpop-jp   { font-family: var(--font-jp); font-size: 0.8rem; color: var(--text-secondary); }
+.cpop-stats { display: flex; align-items: center; gap: 0.3rem; flex-wrap: wrap; margin: 0.3rem 0 0.4rem; }
+.cpop-atk { background: var(--surface-alt); border: 1px solid var(--border-subtle); border-radius: 0.3rem; padding: 0.3rem 0.4rem; margin-top: 0.2rem; }
+.cpop-atk-head { display: flex; justify-content: space-between; align-items: center; gap: 0.3rem; }
+.cpop-atk-name { font-size: 0.68rem; font-weight: 600; color: var(--dark); }
+.cpop-atk-dmg  { font-size: 0.65rem; font-family: var(--font-mono); font-weight: 700; color: var(--red); }
+.cpop-atk-eff  { font-size: 0.6rem; color: var(--text-secondary); line-height: 1.4; margin-top: 0.15rem; }
+.cpop-wwr { display: flex; gap: 0; margin-top: 0.4rem; border: 1px solid var(--border-subtle); border-radius: 0.3rem; overflow: hidden; }
+.cpop-wwr-cell { flex: 1; text-align: center; padding: 0.3rem 0.2rem; font-size: 0.56rem; font-family: var(--font-mono); border-right: 1px solid var(--border-subtle); }
+.cpop-wwr-cell:last-child { border-right: none; }
+.cpop-wwr-lbl { color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 0.15rem; }
+.cpop-wwr-val { color: var(--dark); font-weight: 600; }
+.cpop-loading { text-align: center; padding: 0.5rem; font-size: 0.65rem; font-family: var(--font-mono); color: var(--text-secondary); }
+
+/* ═══ DECK VIEWER PAGE ═══ */
+.viewer-page {
+  position: fixed; inset: 0; z-index: 850;
+  background: #1a2028; display: flex; flex-direction: column; overflow: hidden;
+  animation: fadeIn 0.2s ease;
+}
+.viewer-header {
+  background: #111518; padding: 0 1rem; height: 52px;
+  display: flex; align-items: center; gap: 0.75rem;
+  border-bottom: 3px solid var(--red); flex-shrink: 0;
+}
+.viewer-title {
+  font-family: var(--font-serif); font-size: 1.1rem; font-weight: 700;
+  color: #fff; flex: 1;
+}
+.viewer-subtitle { font-size: 0.65rem; font-family: var(--font-mono); color: rgba(238,238,238,0.45); }
+.viewer-body { flex: 1; overflow-y: auto; padding: 1rem; }
+.viewer-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  gap: 0.625rem;
+}
+.viewer-card {
+  border-radius: 0.625rem; overflow: hidden; background: #3A4750;
+  cursor: pointer; position: relative;
+  border: 2px solid transparent;
+  transition: border-color 0.15s, transform 0.15s, box-shadow 0.15s;
+  user-select: none;
+}
+.viewer-card:hover  { border-color: var(--red); transform: translateY(-3px); box-shadow: 0 6px 20px rgba(215,35,35,0.2); }
+.viewer-card:active { transform: scale(0.96); }
+.viewer-card-img { aspect-ratio: 2.5/3.5; background: #3A4750; overflow: hidden; position: relative; }
+.viewer-card-img img { width: 100%; height: 100%; object-fit: contain; }
+.viewer-card-img .no-img { width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:1.5rem; }
+.viewer-card-info { background: #fff; padding: 0.25rem 0.35rem; }
+.viewer-card-name { font-size: 0.6rem; font-weight: 600; color: var(--dark); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.viewer-count-badge {
+  position: absolute; top: 0.3rem; right: 0.3rem;
+  background: var(--red); color: #fff;
+  font-size: 0.58rem; font-family: var(--font-mono); font-weight: 700;
+  padding: 0.08rem 0.32rem; border-radius: 999px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+}
+/* Viewer translation panel (full-screen overlay) */
+.viewer-trans-overlay {
+  position: absolute; inset: 0; z-index: 20;
+  background: rgba(15,20,28,0.78); backdrop-filter: blur(6px);
+  display: flex; align-items: flex-end;
+}
+@media(min-width:600px) { .viewer-trans-overlay { align-items: center; justify-content: center; } }
+.viewer-trans-panel {
+  background: var(--surface); width: 100%;
+  border-radius: 1.25rem 1.25rem 0 0; max-height: 90vh; overflow-y: auto;
+  animation: fadeSlideUp 0.28s cubic-bezier(0.22,1,0.36,1);
+  padding: 1.25rem;
+}
+@media(min-width:600px) {
+  .viewer-trans-panel { border-radius: 1rem; max-width: 780px; max-height: 85vh; }
+}
+.vtrans-header { display: flex; align-items: flex-start; gap: 1rem; margin-bottom: 1rem; }
+.vtrans-img { width: 110px; flex-shrink: 0; aspect-ratio: 2.5/3.5; border-radius: 0.625rem; overflow: hidden; background: #3A4750; }
+.vtrans-img img { width: 100%; height: 100%; object-fit: contain; }
+.vtrans-names { flex: 1; }
+.vtrans-jp { font-family: var(--font-jp); font-size: 1.1rem; color: var(--text-secondary); }
+.vtrans-en { font-family: var(--font-serif); font-size: 1.6rem; font-weight: 700; color: var(--dark); line-height: 1.1; }
+.vtrans-stats { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 0.5rem; }
+.vtrans-close { flex-shrink: 0; font-size: 1rem; opacity: 0.4; padding: 0.25rem 0.5rem; border-radius: 0.3rem; transition: opacity 0.15s; }
+.vtrans-close:hover { opacity: 1; }
+.vtrans-section { font-size: 0.62rem; font-family: var(--font-mono); letter-spacing: 0.14em; text-transform: uppercase; color: var(--red-dim); margin: 0.875rem 0 0.4rem; }
+.vtrans-attack { background: var(--surface-alt); border: 1.5px solid var(--border-subtle); border-radius: 0.5rem; padding: 0.625rem 0.75rem; margin-bottom: 0.4rem; }
+.vtrans-atk-head { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
+.vtrans-atk-cost { display: flex; gap: 0.15rem; }
+.vtrans-atk-name { font-family: var(--font-serif); font-size: 0.95rem; font-weight: 600; color: var(--dark); flex: 1; }
+.vtrans-atk-dmg  { font-family: var(--font-mono); font-weight: 700; font-size: 0.82rem; color: var(--red); }
+.vtrans-atk-eff  { font-size: 0.78rem; color: var(--text-secondary); line-height: 1.6; margin-top: 0.4rem; }
+.vtrans-wwr { display: grid; grid-template-columns: repeat(3,1fr); gap: 0.5rem; }
+.vtrans-wwr-cell { background: var(--surface-alt); border: 1.5px solid var(--border-subtle); border-radius: 0.4rem; padding: 0.5rem; text-align: center; }
+.vtrans-wwr-lbl { font-size: 0.6rem; font-family: var(--font-mono); text-transform: uppercase; color: var(--text-secondary); margin-bottom: 0.25rem; }
+.vtrans-wwr-val { font-size: 0.72rem; font-family: var(--font-mono); font-weight: 600; color: var(--dark); }
+.vtrans-loading { text-align: center; padding: 2rem; }
+
+/* Import banner */
+.import-banner {
+  background: var(--surface); border: 1.5px solid var(--border-mid);
+  border-left: 4px solid var(--red); border-radius: 0.5rem;
+  padding: 0.75rem 1rem; display: flex; align-items: center; gap: 0.75rem;
+  animation: fadeSlideUp 0.3s ease; margin: 0.75rem 1.5rem 0;
+}
+.import-banner-text { flex: 1; font-size: 0.78rem; color: var(--text-primary); }
+.import-banner-name { font-weight: 600; color: var(--red); }
+</style>
+</head>
+<body>
+
+<!-- Corner Pokéball watermark (top-left arc) -->
+<div class="pb-corner-tl" aria-hidden="true"></div>
+
+<!-- ═══ HEADER — Pokéball top hemisphere ═══ -->
+<header class="site-header">
+  <div class="header-inner">
+    <div class="header-logo">
+      <div class="header-pokeball-icon" aria-hidden="true"></div>
+      <h1 class="header-title">Card Sensei</h1>
+    </div>
+    <div class="header-right">
+      <span class="header-subtitle">カード先生</span>
+      <span class="header-badge">Pokémon TCG · Translation</span>
+    </div>
+  </div>
+</header>
+
+<!-- ═══ POKÉBALL EQUATOR ═══ -->
+<div class="pb-equator" aria-hidden="true">
+  <div class="pb-btn"></div>
+</div>
+
+<!-- ═══ PAGE WRAPPER ═══ -->
+<div class="page-wrapper">
+
+  <!-- ── Left: search + results ── -->
+  <div class="main-col">
+
+    <!-- Search panel -->
+    <div class="search-section">
+      <div class="mode-tabs">
+        <button class="mode-tab active" id="tab-type" onclick="setMode('type')">✏️ Type Name</button>
+        <button class="mode-tab"        id="tab-scan" onclick="setMode('scan')">📷 Scan Card</button>
+      </div>
+
+      <!-- Type mode -->
+      <div id="mode-type">
+        <div class="search-row">
+          <input class="input-gold" id="search-input" type="text"
+            placeholder="Search Pokémon name… (e.g. Charizard, Pikachu)"
+            autocomplete="off" autocorrect="off" spellcheck="false">
+          <button class="btn-gold search-btn" id="search-btn" onclick="doSearchImmediate()">→</button>
+        </div>
+        <div class="examples">
+          <span class="example-label">Try:</span>
+          <button class="chip" onclick="quickSearch('Charizard')">Charizard <span class="jp">リザードン</span></button>
+          <button class="chip" onclick="quickSearch('Pikachu')">Pikachu <span class="jp">ピカチュウ</span></button>
+          <button class="chip" onclick="quickSearch('Mewtwo')">Mewtwo <span class="jp">ミュウツー</span></button>
+          <button class="chip" onclick="quickSearch('Eevee')">Eevee <span class="jp">イーブイ</span></button>
+        </div>
+      </div>
+
+      <!-- Scan mode -->
+      <div id="mode-scan" class="hidden">
+        <div class="scanner-wrap">
+          <div class="scanner-header">
+            <span class="scanner-title">Card Scanner</span>
+            <button class="btn-ghost" onclick="setMode('type')" style="font-size:0.7rem;padding:0.2rem 0.5rem">✕ Close</button>
+          </div>
+          <div class="scanner-body">
+            <div class="scan-vp" id="scan-vp">
+              <video id="scan-video" playsinline muted></video>
+              <canvas id="scan-canvas"></canvas>
+              <div class="scan-idle-ui" id="scan-idle"><div style="font-size:2rem">📷</div><p style="font-size:0.8rem;color:var(--text-secondary)">Point your camera at the Japanese card name</p></div>
+              <div class="scan-spinner-ui hidden" id="scan-req"><div class="spinner"></div><p style="font-size:0.8rem;color:var(--text-secondary)">Starting camera…</p></div>
+              <div class="scan-processing-ui hidden" id="scan-proc">
+                <div class="spinner"></div>
+                <p class="scan-proc-text" id="scan-proc-text">Reading Japanese text… 0%</p>
+                <div class="scan-prog-bar"><div class="scan-prog-fill" id="scan-prog-fill" style="width:0%"></div></div>
+              </div>
+              <div class="scan-live-overlay hidden" id="scan-live-ov">
+                <div class="scan-corner" style="top:20%;left:15%;border-top:2px solid var(--red);border-left:2px solid var(--red)"></div>
+                <div class="scan-corner" style="top:20%;right:15%;border-top:2px solid var(--red);border-right:2px solid var(--red)"></div>
+                <div class="scan-corner" style="bottom:20%;left:15%;border-bottom:2px solid var(--red);border-left:2px solid var(--red)"></div>
+                <div class="scan-corner" style="bottom:20%;right:15%;border-bottom:2px solid var(--red);border-right:2px solid var(--red)"></div>
+                <span class="scan-align">Align card name here</span>
+              </div>
+              <div class="scan-error-ui hidden" id="scan-err"><div style="font-size:1.75rem">⚠️</div><p class="scan-error-text" id="scan-err-msg"></p></div>
+            </div>
+            <div class="scan-result-box hidden" id="scan-result">
+              <p class="scan-result-lbl">Extracted Text</p>
+              <p class="scan-result-text" id="scan-result-text">—</p>
+              <p class="scan-result-hint">Review the text above. Edit it in the search bar if needed.</p>
+            </div>
+            <div class="scan-controls" id="scan-controls">
+              <button class="btn-gold" id="scan-btn" onclick="handleScanBtn()" style="flex:1">Open Camera</button>
+            </div>
+            <p class="scan-hint">For best results, ensure the card name is well-lit and in focus</p>
+          </div>
+        </div>
+      </div>
+    </div><!-- /search-section -->
+
+    <!-- Results area -->
+    <div class="results-col" id="results-col">
+
+      <!-- Error banner -->
+      <div id="error-banner" class="error-banner hidden">
+        <span>⚠</span><span id="error-text"></span>
+        <button onclick="clearError()">✕</button>
+      </div>
+
+      <!-- Skeleton grid -->
+      <div class="hidden" id="skeleton-section">
+        <div class="card-grid" id="skeleton-grid"></div>
+      </div>
+
+      <!-- Results -->
+      <div class="hidden" id="results-section">
+        <p class="results-header" id="results-header"></p>
+        <div class="card-grid stagger" id="card-grid"></div>
+      </div>
+
+      <!-- No results -->
+      <div class="empty-state hidden" id="no-results">
+        <div class="empty-icon">🔍</div>
+        <p class="empty-title">No cards found</p>
+        <p class="empty-desc">Try checking the spelling or use the scan feature to capture the card name directly.</p>
+      </div>
+
+      <!-- Empty state -->
+      <div class="empty-state" id="empty-state">
+        <div class="empty-icon">🃏</div>
+        <div>
+          <p class="empty-title">Find your card</p>
+          <p class="empty-desc">Type an English name like <span style="color:var(--red)">Charizard</span>, or scan a physical Japanese card with your camera.</p>
+        </div>
+        <div class="feature-hints">
+          <div class="hint-chip"><span class="hint-chip-icon">⚡</span><p class="hint-chip-title">Instant search</p><p class="hint-chip-desc">EN + JA fetched together</p></div>
+          <div class="hint-chip"><span class="hint-chip-icon">🌐</span><p class="hint-chip-title">Full translation</p><p class="hint-chip-desc">Names, attacks, effects</p></div>
+          <div class="hint-chip"><span class="hint-chip-icon">🗂️</span><p class="hint-chip-title">Deck builder</p><p class="hint-chip-desc">60-card limit, saved locally</p></div>
+        </div>
+      </div>
+    </div><!-- /results-col -->
+
+  </div><!-- /main-col -->
+
+  <!-- ── Right: deck panel ── -->
+  <div class="deck-col">
+    <div class="deck-panel">
+      <div class="deck-header">
+        <span class="deck-title" id="deck-title-badge">MY DECK</span>
+        <div style="display:flex;align-items:center;gap:0.4rem">
+          <span class="deck-count" id="deck-count-badge">0/60</span>
+          <button onclick="openViewer()" style="font-size:0.58rem;font-family:var(--font-mono);letter-spacing:0.1em;text-transform:uppercase;color:rgba(238,238,238,0.7);padding:0.2rem 0.5rem;border-radius:0.3rem;border:1px solid rgba(238,238,238,0.2);transition:all 0.15s" onmouseover="this.style.borderColor='rgba(215,35,35,0.6)';this.style.color='#fff'" onmouseout="this.style.borderColor='rgba(238,238,238,0.2)';this.style.color='rgba(238,238,238,0.7)'">VIEW →</button>
+          <button onclick="openBuilder()" style="font-size:0.58rem;font-family:var(--font-mono);letter-spacing:0.1em;text-transform:uppercase;color:rgba(238,238,238,0.7);padding:0.2rem 0.5rem;border-radius:0.3rem;border:1px solid rgba(238,238,238,0.2);transition:all 0.15s" onmouseover="this.style.borderColor='rgba(215,35,35,0.6)';this.style.color='#fff'" onmouseout="this.style.borderColor='rgba(238,238,238,0.2)';this.style.color='rgba(238,238,238,0.7)'">BUILD →</button>
+        </div>
+      </div>
+      <div class="deck-tabs">
+        <button class="deck-tab active" id="dtab-deck" onclick="switchDeckTab('deck')">Deck</button>
+        <button class="deck-tab"        id="dtab-box"  onclick="switchDeckTab('box')">Box</button>
+      </div>
+      <div class="deck-list" id="deck-list"></div>
+      <div class="deck-footer">
+        <div class="deck-progress"><div class="deck-progress-fill" id="deck-prog" style="width:0%"></div></div>
+        <div class="deck-stats">
+          <span id="deck-slots-text">60 slots remaining</span>
+          <span id="deck-unique-text">0 unique</span>
+        </div>
+      </div>
+    </div>
+  </div><!-- /deck-col -->
+
+</div><!-- /page-wrapper -->
+
+<!-- ═══ IMPORT BANNER ═══ (injected by JS on hash load) -->
+<div id="import-banner-root"></div>
+
+<!-- ═══ DECK BUILDER PAGE ═══ -->
+<div id="builder-root"></div>
+
+<!-- ═══ DECK VIEWER PAGE ═══ -->
+<div id="viewer-root"></div>
+
+<!-- ═══ MODAL ═══ (injected by JS) -->
+<div id="modal-root"></div>
+
+<footer>Card data from TCGDex · Card Sensei</footer>
+
+<script>
+'use strict'
+// ═══════════════════════════════════════════════════
+// SET MAPPING
+// ═══════════════════════════════════════════════════
+const JA_TO_EN = {
+  'SV2a':'sv03.5','SV8':'sv08','SV9':'sv09','SV11B':'sv10.5b','SV11W':'sv10.5w'
+}
+const EN_TO_JA = Object.fromEntries(Object.entries(JA_TO_EN).map(([j,e])=>[e,j]))
+
+function parseCardId(id) {
+  const i = id.lastIndexOf('-'); if (i===-1) return null
+  return { setId: id.slice(0,i), localId: id.slice(i+1) }
+}
+function toEnglishCardId(jaId) {
+  const p=parseCardId(jaId); if(!p) return null
+  const e=JA_TO_EN[p.setId]; return e?`${e}-${p.localId}`:null
+}
+function toJapaneseCardId(enId) {
+  const p=parseCardId(enId); if(!p) return null
+  const j=EN_TO_JA[p.setId]; return j?`${j}-${p.localId}`:null
+}
+
+// ═══════════════════════════════════════════════════
+// TYPE DATA
+// ═══════════════════════════════════════════════════
+const TYPE_S = {
+  Fire:{bg:'#2a0a04',text:'#ff7040',border:'#e85c1a'},
+  Water:{bg:'#041028',text:'#60aaee',border:'#4488dd'},
+  Grass:{bg:'#041a06',text:'#70cc58',border:'#5aaf48'},
+  Lightning:{bg:'#1e1400',text:'#f0c040',border:'#d4a820'},
+  Psychic:{bg:'#1a0422',text:'#dd88ff',border:'#cc66ee'},
+  Fighting:{bg:'#200406',text:'#e06050',border:'#c0392b'},
+  Darkness:{bg:'#0c0c16',text:'#9090b8',border:'#5a5a7a'},
+  Metal:{bg:'#10141c',text:'#aabbcc',border:'#8899aa'},
+  Dragon:{bg:'#0c0422',text:'#8866ff',border:'#6644dd'},
+  Fairy:{bg:'#200820',text:'#ff99cc',border:'#ff77aa'},
+  Colorless:{bg:'#141018',text:'#aa99bb',border:'#9988aa'},
+}
+const COST_C = {Fire:'#e85c1a',Water:'#4488dd',Grass:'#5aaf48',Lightning:'#d4a820',Psychic:'#cc66ee',Fighting:'#c0392b',Darkness:'#5a5a7a',Metal:'#8899aa',Dragon:'#6644dd',Fairy:'#ff77aa',Colorless:'#9988aa'}
+
+function typeBadgeHTML(t,sm=false) {
+  const s=TYPE_S[t]??TYPE_S.Colorless
+  return `<span class="type-badge${sm?' sm':''}" style="background:${s.bg};color:${s.text};border:1px solid ${s.border};box-shadow:0 0 8px ${s.border}22">${t}</span>`
+}
+function costDotHTML(t) {
+  const c=COST_C[t]??COST_C.Colorless
+  const a=t==='Colorless'?'✦':t[0]
+  return `<span class="cost-dot" title="${t}" style="background:${c}22;border:1px solid ${c};color:${c}">${a}</span>`
+}
+
+// ═══════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════
+const searchCache     = new Map()
+const cardDetailCache = new Map()   // keyed by card id → { ja, en }
+const cardDataStore   = new Map()   // cardId → brief card data (populated by renderGrid)
+let debounceTimer  = null
+let searchInFlight = null
+let currentTab    = 'deck'   // 'deck' | 'box'
+let scanStatus    = 'idle'
+let mediaStream   = null
+let scanExtracted = ''
+let modalCardData = null     // set in renderModal, used by qty controls
+
+// ── Multi-deck data model ──────────────────────────
+// Decks: [{id, name, cards:[{card,qty}]}]
+// box:   [{card, qty}] — your collection
+
+function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2,5) }
+
+let decks = loadLS('cs_decks')
+if (!decks) {
+  const oldCards = loadLS('cs_deck') || []
+  decks = [{ id: 'default', name: 'My Deck', cards: oldCards }]
+  saveLS('cs_decks', decks)
+}
+let activeDeckId = loadLS('cs_active_deck_id') || decks[0]?.id || 'default'
+
+function getActiveDeck() {
+  return decks.find(d => d.id === activeDeckId) || decks[0]
+}
+function getDeck() { return getActiveDeck()?.cards || [] }
+function syncDeck() { deck = getDeck() }
+function saveDecks() {
+  saveLS('cs_decks', decks)
+  saveLS('cs_active_deck_id', activeDeckId)
+  syncDeck()
+  // Update deck title badge
+  const tb = document.getElementById('deck-title-badge')
+  if (tb) tb.textContent = getActiveDeck()?.name?.toUpperCase() || 'MY DECK'
+}
+
+// backward-compat alias — always points to active deck's cards
+let deck = getDeck()
+
+let box = loadLS('cs_box') || []
+
+// ═══════════════════════════════════════════════════
+// LAZY LOAD (IntersectionObserver)
+// ═══════════════════════════════════════════════════
+function loadImg(img) {
+  if (!img.dataset.src) return
+  img.src = img.dataset.src
+  delete img.dataset.src
+  imgObserver.unobserve(img)
+}
+
+/** Called by onerror on card grid images.
+ *  First failure → try /high.webp instead of /low.webp (older sets only have high).
+ *  Second failure → show the 🃏 placeholder. */
+function handleImgError(img) {
+  if (!img._triedHigh) {
+    img._triedHigh = true
+    const highUrl = img.src.replace('/low.webp', '/high.webp')
+    if (highUrl !== img.src) {
+      img.onerror = () => handleImgError(img)
+      img.src = highUrl
+      return
+    }
+  }
+  // Both low and high failed — card has no image on TCGDex
+  img.onerror = null
+  const placeholder = document.createElement('div')
+  placeholder.className = 'no-img'
+  placeholder.innerHTML = '<span style="font-size:2rem">🃏</span>'
+  img.replaceWith(placeholder)
+}
+const imgObserver = new IntersectionObserver((entries) => {
+  entries.forEach(entry => { if (entry.isIntersecting) loadImg(entry.target) })
+}, { rootMargin: '300px' })   // pre-load 300px before they scroll into view
+
+// ═══════════════════════════════════════════════════
+// SEARCH + DEBOUNCE
+// ═══════════════════════════════════════════════════
+
+/** True if string contains hiragana / katakana / kanji */
+function isJapaneseQuery(str) {
+  return /[\u3040-\u9FFF]/.test(str)
+}
+
+/** fetch() with a hard timeout via AbortController */
+async function fetchTimed(url, ms = 6000) {
+  const ctrl = new AbortController()
+  const tid  = setTimeout(() => ctrl.abort(), ms)
+  try {
+    const r = await fetch(url, { signal: ctrl.signal })
+    clearTimeout(tid)
+    return r.ok ? r.json() : []
+  } catch {
+    clearTimeout(tid)
+    return []   // timeout or network error → empty, not a crash
+  }
+}
+
+document.getElementById('search-input').addEventListener('input', () => {
+  clearTimeout(debounceTimer)
+  const q = document.getElementById('search-input').value.trim()
+  if (!q) { showEmpty(); return }
+
+  // Cache hit → render IMMEDIATELY, zero delay, no skeleton flash
+  const hit = getCachedResult(q)
+  if (hit) { renderSearchResult(q, hit); return }
+
+  // No cache → show skeleton right now so the UI feels responsive,
+  // then fire the actual fetch after 150ms of typing silence
+  hide('empty-state'); hide('no-results'); hide('results-section')
+  showSkeleton(true)
+  debounceTimer = setTimeout(() => doSearch(q), 150)
+})
+
+document.getElementById('search-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') { clearTimeout(debounceTimer); doSearchImmediate() }
+})
+
+function doSearchImmediate() {
+  clearTimeout(debounceTimer)   // always cancel pending debounce before explicit search
+  const q = document.getElementById('search-input').value.trim()
+  if (q) doSearch(q)
+}
+function quickSearch(name) {
+  document.getElementById('search-input').value = name
+  clearTimeout(debounceTimer)
+  doSearch(name)
+}
+
+/** Return cached results (memory first, then localStorage) or null */
+function getCachedResult(query) {
+  const key = query.toLowerCase().trim()
+  if (searchCache.has(key)) return searchCache.get(key)
+  const persisted = lsCacheGet(key)
+  if (persisted) { searchCache.set(key, persisted); return persisted }
+  return null
+}
+
+/** Render results (or no-results) without touching the skeleton */
+function renderSearchResult(query, merged) {
+  clearError()
+  hide('empty-state'); hide('no-results'); hide('results-section'); hide('skeleton-section')
+  if (merged.length === 0) show('no-results')
+  else renderGrid(merged)
+}
+
+async function doSearch(query) {
+  const key   = query.toLowerCase().trim()
+  const hasJP = isJapaneseQuery(query)
+
+  // Mark this as the active search — any older concurrent call will bail when it resolves
+  searchInFlight = key
+
+  clearError()
+  hide('empty-state'); hide('no-results'); hide('results-section'); hide('skeleton-section')
+
+  // Check cache — if hit, render instantly without showing skeleton
+  const cached = getCachedResult(query)
+  if (cached) { renderSearchResult(query, cached); return }
+
+  // No cache → show skeleton while fetching
+  showSkeleton(true)
+
+  try {
+    const BASE = 'https://api.tcgdex.net/v2'
+    const enUrl = `${BASE}/en/cards?name=${encodeURIComponent(query)}`
+    const jaUrl = `${BASE}/ja/cards?name=${encodeURIComponent(query)}`
+
+    // JA API only understands Japanese card names — skip for English queries
+    let enCards, jaCards
+    if (hasJP) {
+      const [enRaw, jaRaw] = await Promise.all([fetchTimed(enUrl), fetchTimed(jaUrl)])
+      enCards = Array.isArray(enRaw) ? enRaw : []
+      jaCards = Array.isArray(jaRaw) ? jaRaw : []
+    } else {
+      const enRaw = await fetchTimed(enUrl)
+      enCards = Array.isArray(enRaw) ? enRaw : []
+      jaCards = []
+    }
+
+    // If another search started while we were fetching, discard stale results
+    if (searchInFlight !== key) return
+
+    const enIdSet = new Set(enCards.map(c => c.id))
+    const jpOnly  = jaCards
+      .filter(jc => { const e = toEnglishCardId(jc.id); return !e || !enIdSet.has(e) })
+      .map(c => ({ ...c, _jpOnly: true, _lang: 'ja' }))
+
+    const merged = [
+      ...enCards.map(c => ({ ...c, _lang: 'en' })),
+      ...jpOnly,
+    ]
+    searchCache.set(key, merged)
+    lsCacheSet(key, merged)   // persist: next page load is instant
+
+    showSkeleton(false)
+    renderSearchResult(query, merged)
+  } catch {
+    if (searchInFlight !== key) return   // stale — don't clobber the active search
+    showSkeleton(false)
+    showError('Search failed. Please check your connection and try again.')
+    showEmpty()
+  }
+}
+
+// ═══════════════════════════════════════════════════
+// GRID RENDERING
+// ═══════════════════════════════════════════════════
+function showSkeleton(on) {
+  if (on) {
+    const g = document.getElementById('skeleton-grid')
+    g.innerHTML = Array.from({length:8}).map(()=>`
+      <div class="skel-card">
+        <div class="skeleton skel-img"></div>
+        <div class="skeleton skel-l1"></div>
+        <div class="skeleton skel-l2"></div>
+      </div>`).join('')
+    show('skeleton-section')
+  } else {
+    hide('skeleton-section')
+  }
+}
+
+function renderGrid(cards) {
+  const sec  = document.getElementById('results-section')
+  const hdr  = document.getElementById('results-header')
+  const grid = document.getElementById('card-grid')
+
+  const enCount = cards.filter(c=>!c._jpOnly).length
+  const jpCount = cards.filter(c=>c._jpOnly).length
+  let hdrText = `${cards.length} result${cards.length!==1?'s':''} found`
+  if (jpCount>0) hdrText += ` <span>(${jpCount} JP-only)</span>`
+  hdrText += ` <span>— click a card to translate</span>`
+  hdr.innerHTML = hdrText
+
+  grid.innerHTML = cards.map((card, i) => {
+    const imgBase = card.image ? card.image : null
+    const imgSrc  = imgBase ? `${imgBase}/low.webp` : null
+    const isJP    = card._lang === 'ja'
+    const jpBadge = card._jpOnly ? `<span class="badge-jp">JP Only</span>` : ''
+
+    // Store card data for qty functions
+    const brief = { id:card.id, name:card.name, image:imgBase, localId:card.localId, set:card.set, _lang:card._lang||'en', _jpOnly:!!card._jpOnly }
+    cardDataStore.set(card.id, brief)
+
+    const boxQty  = box.find(e=>e.card.id===card.id)?.qty  ?? 0
+    const deckQty = getDeck().find(e=>e.card.id===card.id)?.qty ?? 0
+    const eid     = escAtt(card.id)
+
+    return `
+    <div class="card-thumb holo-card"
+      onmousemove="tilt(this,event)" onmouseleave="untilt(this);cancelHold()"
+      onmousedown="startHold(event,'${eid}','${escAtt(card._lang||'en')}')" onmouseup="cancelHold()"
+      ontouchstart="startHold(event,'${eid}','${escAtt(card._lang||'en')}')" ontouchend="cancelHold()" ontouchcancel="cancelHold()"
+      style="transform-style:preserve-3d;animation:fadeSlideUp 0.4s ease ${i*50}ms both forwards;opacity:0">
+      <button class="card-clickable" onclick="openModal('${eid}','${escAtt(card._lang||'en')}')">
+        <div class="card-thumb-img">
+          ${imgSrc
+            ? `<img data-src="${escAtt(imgSrc)}" alt="${escHtml(card.name)}"
+                onerror="handleImgError(this)"
+                style="width:100%;height:100%;object-fit:contain;opacity:0;transition:opacity 0.4s" onload="this.style.opacity=1">`
+            : `<div class="no-img"><span style="font-size:2rem">🃏</span></div>`
+          }
+        </div>
+        <div class="card-thumb-info">
+          <p class="card-thumb-name${isJP?' jp':''}">${escHtml(card.name)}</p>
+          <div class="card-thumb-sub">#${escHtml(card.localId||'?')} ${jpBadge}</div>
+        </div>
+      </button>
+      <div class="card-qty-row">
+        <div class="qty-section">
+          <span class="qty-lbl">BOX</span>
+          <div class="qty-ctrl">
+            <button class="qty-btn" onclick="qtyChange('box','${eid}',-1)">−</button>
+            <span class="qty-num${boxQty>0?' has-qty':''}" data-cardid="${eid}" data-src="box">${boxQty}</span>
+            <button class="qty-btn" onclick="qtyChange('box','${eid}',1)">+</button>
+          </div>
+        </div>
+        <div class="qty-section">
+          <span class="qty-lbl">DECK</span>
+          <div class="qty-ctrl">
+            <button class="qty-btn" onclick="qtyChange('deck','${eid}',-1)">−</button>
+            <span class="qty-num${deckQty>0?' has-qty':''}" data-cardid="${eid}" data-src="deck">${deckQty}</span>
+            <button class="qty-btn" onclick="qtyChange('deck','${eid}',1)">+</button>
+          </div>
+        </div>
+      </div>
+    </div>`
+  }).join('')
+
+  // Observe all lazy images
+  // Register all lazy images; load the first row immediately (already in viewport)
+  grid.querySelectorAll('img[data-src]').forEach((img, idx) => {
+    if (idx < 4) loadImg(img)   // first row — always visible, no need to wait for observer
+    else imgObserver.observe(img)
+  })
+
+  show('results-section')
+}
+
+function tilt(el, e) {
+  const r=el.getBoundingClientRect()
+  const x=(e.clientX-r.left)/r.width-0.5, y=(e.clientY-r.top)/r.height-0.5
+  el.style.transform=`perspective(800px) rotateX(${y*-7}deg) rotateY(${x*7}deg) translateY(-3px)`
+}
+function untilt(el) {
+  el.style.transform='perspective(800px) rotateX(0deg) rotateY(0deg) translateY(0px)'
+}
+
+// ═══════════════════════════════════════════════════
+// MODAL — CARD DETAIL
+// ═══════════════════════════════════════════════════
+let modalSpinner = null
+
+async function openModal(id, lang) {
+  // ── 1. Memory cache hit → instant render, no spinner ──────────────────
+  if (cardDetailCache.has(id)) {
+    const { ja, en } = cardDetailCache.get(id)
+    const primaryCard = lang === 'en' ? (en ?? ja) : (ja ?? en)
+    renderModal({ ja, en, id, primaryCard, sourceLang: lang })
+    return
+  }
+  // ── 2. localStorage cache hit → instant render, no spinner ─────────────
+  const persisted = lsDetailGet(id)
+  if (persisted) {
+    cardDetailCache.set(id, persisted)
+    const { ja, en } = persisted
+    const primaryCard = lang === 'en' ? (en ?? ja) : (ja ?? en)
+    renderModal({ ja, en, id, primaryCard, sourceLang: lang })
+    return
+  }
+
+  // ── 3. Show spinner while fetching ─────────────────────────────────────
+  const root = document.getElementById('modal-root')
+  root.innerHTML = `
+    <div class="modal-overlay" onclick="maybeCloseModal(event)">
+      <div class="modal-box" style="padding:3rem;display:flex;align-items:center;justify-content:center">
+        <div style="display:flex;flex-direction:column;align-items:center;gap:1rem">
+          <div class="spinner"></div>
+          <p style="font-size:0.8rem;font-family:var(--font-mono);color:var(--text-secondary)">Loading translation…</p>
+        </div>
+      </div>
+    </div>`
+  document.body.style.overflow = 'hidden'
+
+  try {
+    let ja = null, en = null
+
+    // ── Language-aware fetch: only call the endpoint we know will work ──
+    // EN card IDs (e.g. sv09-001) → fetch EN first, then set-map for JA
+    // JA card IDs (e.g. SV9-001)  → fetch JA first, then set-map for EN
+    if (lang === 'en') {
+      const r = await fetch(`https://api.tcgdex.net/v2/en/cards/${id}`).catch(()=>null)
+      if (r?.ok) en = await r.json()
+      if (en) {
+        const jaId = toJapaneseCardId(id)
+        if (jaId) {
+          const jr = await fetch(`https://api.tcgdex.net/v2/ja/cards/${jaId}`).catch(()=>null)
+          if (jr?.ok) ja = await jr.json()
+        }
+      }
+    } else {
+      const r = await fetch(`https://api.tcgdex.net/v2/ja/cards/${id}`).catch(()=>null)
+      if (r?.ok) ja = await r.json()
+      if (ja) {
+        const enId = toEnglishCardId(id)
+        if (enId) {
+          const er = await fetch(`https://api.tcgdex.net/v2/en/cards/${enId}`).catch(()=>null)
+          if (er?.ok) en = await er.json()
+        }
+      }
+    }
+
+    if (!ja && !en) throw new Error('Card not found')
+
+    // ── Cache the result ────────────────────────────────────────────────
+    cardDetailCache.set(id, { ja, en })
+    lsDetailSet(id, { ja, en })
+
+    const primaryCard = lang === 'en' ? (en ?? ja) : (ja ?? en)
+    renderModal({ ja, en, id, primaryCard, sourceLang: lang })
+  } catch {
+    root.innerHTML = `
+      <div class="modal-overlay" onclick="maybeCloseModal(event)">
+        <div class="modal-box" style="padding:2rem;max-width:400px">
+          <p style="color:#ff8888;text-align:center;margin-bottom:1rem">Failed to load card.</p>
+          <div style="text-align:center"><button class="btn-ghost" onclick="closeModal()">Close</button></div>
+        </div>
+      </div>`
+  }
+}
+
+function renderModal({ ja, en, id, primaryCard, sourceLang }) {
+  const primary    = en ?? ja
+  if (!primary) return
+
+  const imgBase  = (en?.image ?? ja?.image)
+  const imgHigh  = imgBase ? `${imgBase}/high.webp` : null
+
+  const maxAtks  = Math.max(ja?.attacks?.length??0, en?.attacks?.length??0)
+  const maxAbils = Math.max(ja?.abilities?.length??0, en?.abilities?.length??0)
+
+  // Determine if already in deck/box
+  const deckEntry = deck.find(e=>e.card.id===id)
+  const boxEntry  = box.find(e=>e.card.id===id)
+  const deckQty   = deckEntry?.qty ?? 0
+  const boxQty    = boxEntry?.qty  ?? 0
+  const deckTotal = deck.reduce((s,e)=>s+e.qty, 0)
+  const deckFull  = deckTotal >= 60
+  const maxCopies = deckQty >= 4
+
+  const briefCard = {
+    id, name: primary.name, image: imgBase,
+    localId: primary.localId, set: primary.set,
+    _lang: sourceLang, _jpOnly: !en && !!ja
+  }
+  modalCardData = briefCard   // store for qty controls
+  cardDataStore.set(id, briefCard)
+
+  const root = document.getElementById('modal-root')
+  root.innerHTML = `
+  <div class="modal-overlay" id="modal-overlay" onclick="maybeCloseModal(event)">
+    <div class="modal-box" id="modal-box">
+      <!-- Header -->
+      <div class="modal-header">
+        <div class="modal-title-area">
+          ${primary.category ? `<span class="cat-badge">${escHtml(primary.category)}</span>` : ''}
+          <span class="modal-card-id">${escHtml(id)}</span>
+          ${!en && ja ? `<span class="badge-jp">JP Only</span>` : ''}
+        </div>
+        <button class="modal-close" onclick="closeModal()">✕</button>
+      </div>
+
+      <!-- Body -->
+      <div class="modal-body">
+        <div class="modal-grid">
+          <!-- Left: image + meta + actions -->
+          <div class="modal-img-col">
+            <div class="modal-card-img holo-card">
+              ${imgHigh
+                ? `<img src="${escAtt(imgHigh)}" alt="${escHtml(primary.name)}"
+                    onerror="this.style.display='none'"
+                    style="opacity:0;transition:opacity 0.4s" onload="this.style.opacity=1">`
+                : `<span style="font-size:3rem;opacity:0.2">🃏</span>`}
+            </div>
+            <div class="modal-meta">${modalMetaHTML(primary)}</div>
+
+            <!-- Action buttons — qty style -->
+            <div style="width:100%">
+              <div style="display:flex;gap:1.25rem;align-items:flex-end">
+                <!-- Deck qty -->
+                <div style="display:flex;flex-direction:column;gap:0.3rem">
+                  <span style="font-size:0.58rem;font-family:var(--font-mono);color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.08em">Deck</span>
+                  <div style="display:flex;align-items:center;gap:0.3rem">
+                    <button class="btn-ghost" id="btn-deck-minus" onclick="modalQtyChange('deck',-1)" style="width:34px;height:34px;padding:0;display:flex;align-items:center;justify-content:center;font-size:1.1rem">−</button>
+                    <span id="modal-deck-qty" style="min-width:28px;text-align:center;font-family:var(--font-mono);font-weight:700;font-size:1rem;color:var(--red)">${deckQty}</span>
+                    <button class="btn-gold" id="btn-deck-plus" onclick="modalQtyChange('deck',1)" style="width:34px;height:34px;padding:0;display:flex;align-items:center;justify-content:center;font-size:1.1rem" ${deckFull||maxCopies?'disabled':''}>+</button>
+                  </div>
+                </div>
+                <!-- Box qty -->
+                <div style="display:flex;flex-direction:column;gap:0.3rem">
+                  <span style="font-size:0.58rem;font-family:var(--font-mono);color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.08em">Box</span>
+                  <div style="display:flex;align-items:center;gap:0.3rem">
+                    <button class="btn-ghost" onclick="modalQtyChange('box',-1)" style="width:34px;height:34px;padding:0;display:flex;align-items:center;justify-content:center;font-size:1.1rem">−</button>
+                    <span id="modal-box-qty" style="min-width:28px;text-align:center;font-family:var(--font-mono);font-weight:700;font-size:1rem;color:var(--dark)">${boxQty}</span>
+                    <button class="btn-blue" onclick="modalQtyChange('box',1)" style="width:34px;height:34px;padding:0;display:flex;align-items:center;justify-content:center;font-size:1.1rem">+</button>
+                  </div>
+                </div>
+              </div>
+              <div id="modal-feedback" style="margin-top:0.5rem"></div>
+            </div>
+          </div>
+
+          <!-- Right: translation detail -->
+          <div class="modal-right">
+            ${nameBoxHTML(ja, en, primary)}
+            ${descHTML(ja, en)}
+            ${trainerEffectHTML(ja, en)}
+            ${maxAbils>0 ? `<div><p class="sec-label">Abilities</p>${Array.from({length:maxAbils}).map((_,i)=>abilityRowHTML(ja?.abilities?.[i],en?.abilities?.[i])).join('')}</div>` : ''}
+            ${maxAtks>0  ? `<div><p class="sec-label">Attacks</p>${Array.from({length:maxAtks}).map((_,i)=>attackRowHTML(ja?.attacks?.[i],en?.attacks?.[i])).join('')}</div>` : ''}
+            ${wwrHTML(primary)}
+            ${en?._approximate ? noticeHTML('approx') : ''}
+            ${!en && ja ? noticeHTML('ja-only') : ''}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>`
+}
+
+function maybeCloseModal(e) {
+  if (e.target.id === 'modal-overlay') closeModal()
+}
+function closeModal() {
+  document.getElementById('modal-root').innerHTML = ''
+  document.body.style.overflow = ''
+  modalCardData = null
+}
+
+// Keyboard close
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeModal()
+})
+
+// ═══════════════════════════════════════════════════
+// UNIFIED QTY CHANGE (grid, deck panel, modal, builder)
+// ═══════════════════════════════════════════════════
+function qtyChange(target, cardId, delta) {
+  // ── Resolve card object from any source ───────────────────────────────
+  const card = cardDataStore.get(cardId)
+             || box.find(e=>e.card.id===cardId)?.card
+             || getDeck().find(e=>e.card.id===cardId)?.card
+  if (!card && delta > 0) return   // can't add unknown card
+
+  const d    = getDeck()   // live reference to active deck's cards array
+  const boxI = box.findIndex(e=>e.card.id===cardId)
+  const dkI  = d.findIndex(e=>e.card.id===cardId)
+  const curBoxQty = boxI >= 0 ? box[boxI].qty : 0
+  const curDkQty  = dkI  >= 0 ? d[dkI].qty   : 0
+
+  let deckTouched = false
+  let boxTouched  = false
+
+  if (target === 'deck') {
+    if (delta > 0) {
+      // ── Guard: deck limits ──
+      const total = d.reduce((s,e)=>s+e.qty, 0)
+      if (total >= 60)      { showToast('Deck is full (60/60)'); return }
+      if (curDkQty >= 4)    { showToast('Max 4 copies per card'); return }
+      // ── Auto-add to box if deckQty would exceed boxQty ──
+      // (You can't play a card you don't own)
+      if (curDkQty >= curBoxQty) {
+        if (boxI === -1) box.push({ card, qty: 1 })
+        else             box[boxI].qty++
+        boxTouched = true
+      }
+      // ── Add to deck ──
+      if (dkI === -1) d.push({ card, qty: 1 })
+      else            d[dkI].qty++
+      deckTouched = true
+    } else {
+      // ── Remove from deck only; box is unchanged ──
+      if (dkI === -1) return
+      d[dkI].qty--
+      if (d[dkI].qty <= 0) d.splice(dkI, 1)
+      deckTouched = true
+    }
+  } else {
+    // target === 'box'
+    if (delta > 0) {
+      if (boxI === -1) box.push({ card, qty: 1 })
+      else             box[boxI].qty++
+      boxTouched = true
+    } else {
+      // ── Remove from box; trim deck if it would exceed new box qty ──
+      if (boxI === -1) return
+      const newBoxQty = curBoxQty - 1
+      if (newBoxQty <= 0) {
+        box.splice(boxI, 1)
+        // Remove card from deck entirely (can't own 0 and have them in deck)
+        if (dkI >= 0) { d.splice(dkI, 1); deckTouched = true }
+      } else {
+        box[boxI].qty = newBoxQty
+        // Trim deck qty so it never exceeds box qty
+        if (dkI >= 0 && curDkQty > newBoxQty) {
+          d[dkI].qty = newBoxQty
+          if (d[dkI].qty <= 0) d.splice(dkI, 1)
+          deckTouched = true
+        }
+      }
+      boxTouched = true
+    }
+  }
+
+  if (deckTouched) { syncDeck(); saveDecks() }
+  if (boxTouched)  { saveLS('cs_box', box) }
+
+  // Refresh all views
+  refreshGridQty(cardId)
+  renderDeckPanel()
+  refreshModalQty()
+  if (document.getElementById('builder-root')?.firstChild) { renderBuilderLeft(); renderBuilderRight() }
+}
+
+function refreshGridQty(cardId) {
+  const eid     = CSS.escape(cardId)
+  const boxQty  = box.find(e=>e.card.id===cardId)?.qty  ?? 0
+  const deckQty = getDeck().find(e=>e.card.id===cardId)?.qty ?? 0
+  ;[['box', boxQty], ['deck', deckQty]].forEach(([src, qty]) => {
+    const el = document.querySelector(`.qty-num[data-cardid="${eid}"][data-src="${src}"]`)
+    if (!el) return
+    el.textContent = qty
+    el.className   = 'qty-num' + (qty > 0 ? ' has-qty' : '')
+  })
+}
+
+function refreshModalQty() {
+  if (!modalCardData) return
+  const id      = modalCardData.id
+  const deckQty = getDeck().find(e=>e.card.id===id)?.qty ?? 0
+  const boxQty  = box.find(e=>e.card.id===id)?.qty       ?? 0
+  const dEl = document.getElementById('modal-deck-qty')
+  const bEl = document.getElementById('modal-box-qty')
+  const pEl = document.getElementById('btn-deck-plus')
+  if (dEl) dEl.textContent = deckQty
+  if (bEl) bEl.textContent = boxQty
+  if (pEl) {
+    const total = getDeck().reduce((s,e)=>s+e.qty, 0)
+    pEl.disabled = total >= 60 || deckQty >= 4
+    // Note: we no longer block on boxQty — adding to deck auto-adds to box
+  }
+}
+
+function modalQtyChange(target, delta) {
+  if (!modalCardData) return
+  qtyChange(target, modalCardData.id, delta)
+}
+
+// ═══════════════════════════════════════════════════
+// DECK PANEL RENDERING
+// ═══════════════════════════════════════════════════
+function switchDeckTab(tab) {
+  currentTab = tab
+  document.getElementById('dtab-deck').className = 'deck-tab' + (tab==='deck'?' active':'')
+  document.getElementById('dtab-box').className  = 'deck-tab' + (tab==='box'?' active':'')
+  renderDeckPanel()
+}
+
+function renderDeckPanel() {
+  const list    = document.getElementById('deck-list')
+  const badge   = document.getElementById('deck-count-badge')
+  const prog    = document.getElementById('deck-prog')
+  const slotsTxt= document.getElementById('deck-slots-text')
+  const uniTxt  = document.getElementById('deck-unique-text')
+
+  const d      = getDeck()
+  const total  = d.reduce((s,e)=>s+e.qty, 0)
+  const pct    = Math.min(total/60*100, 100)
+  badge.textContent = `${total}/60`
+  badge.className   = total>=60 ? 'deck-count full' : 'deck-count'
+  prog.style.width  = `${pct}%`
+  slotsTxt.textContent = `${60-total} slot${(60-total)!==1?'s':''} remaining`
+
+  const source = currentTab==='deck' ? d : box
+  uniTxt.textContent = `${source.length} unique`
+
+  if (source.length === 0) {
+    list.innerHTML = `
+      <div class="deck-empty">
+        <div class="deck-empty-icon">${currentTab==='deck'?'🃏':'📦'}</div>
+        <p class="deck-empty-text">${currentTab==='deck'?'Deck is empty · add cards!':'Box is empty'}</p>
+      </div>`
+    return
+  }
+
+  list.innerHTML = source.map(({card, qty}) => {
+    const imgSrc  = card.image ? `${card.image}/low.webp` : null
+    const isJP    = card._lang === 'ja'
+    const eid     = escAtt(card.id)
+    const tab     = currentTab
+    // For box tab: show how many copies are committed to deck
+    const lang    = escAtt(card._lang || 'en')
+    const dkQty   = currentTab === 'box' ? (getDeck().find(e=>e.card.id===card.id)?.qty ?? 0) : 0
+    const allUsed = currentTab === 'box' && dkQty >= qty
+    const partUsed= currentTab === 'box' && dkQty > 0 && dkQty < qty
+    return `
+    <div class="deck-entry${allUsed?' used-in-deck':''}"
+      onclick="cardClick('${eid}','${lang}',event)"
+      onmousedown="startHold(event,'${eid}','${lang}')" onmouseup="cancelHold()" onmouseleave="cancelHold()"
+      ontouchstart="startHold(event,'${eid}','${lang}')" ontouchend="cancelHold()" ontouchcancel="cancelHold()"
+      style="cursor:pointer">
+      ${imgSrc
+        ? `<img class="deck-entry-img" src="${escAtt(imgSrc)}" alt="${escHtml(card.name)}" onerror="this.style.display='none'">`
+        : `<div class="deck-entry-img-placeholder">🃏</div>`}
+      <div class="deck-entry-info">
+        <div class="deck-entry-name${isJP?' font-jp':''}">${escHtml(card.name)}</div>
+        <div class="deck-entry-meta">
+          #${escHtml(card.localId||'?')}${card._jpOnly?' · JP Only':''}
+          ${allUsed  ? `<span class="deck-in-deck-badge" style="margin-left:0.3rem">all in deck</span>` : ''}
+          ${partUsed ? `<span class="deck-in-deck-badge" style="margin-left:0.3rem">${dkQty} in deck</span>` : ''}
+        </div>
+      </div>
+      <div class="deck-qty-ctrl">
+        <button class="deck-qty-btn" onclick="qtyChange('${tab}','${eid}',-1)" title="Remove one">−</button>
+        <span class="deck-qty-num">${qty}</span>
+        <button class="deck-qty-btn" onclick="qtyChange('${tab}','${eid}',1)" title="Add one">+</button>
+      </div>
+    </div>`
+  }).join('')
+}
+
+function removeOne(cardId, source) {
+  qtyChange(source, cardId, -1)
+}
+
+
+// ═══════════════════════════════════════════════════
+// MODAL HTML BUILDERS
+// ═══════════════════════════════════════════════════
+function modalMetaHTML(p) {
+  const rows=[]
+  if(p.set)             rows.push(['Set',escHtml(p.set.name),''])
+  if(p.rarity)          rows.push(['Rarity',escHtml(p.rarity),'gold'])
+  if(p.illustrator)     rows.push(['Illus.',escHtml(p.illustrator),''])
+  if(p.localId)         rows.push(['Card #',escHtml(p.localId),''])
+  if(p.regulationMark)  rows.push(['Regulation',escHtml(p.regulationMark),''])
+  return rows.map(([l,v,c])=>`<div class="modal-meta-row"><span class="mml">${l}</span><span class="mmv ${c}">${v}</span></div>`).join('')
+}
+function nameBoxHTML(ja, en, primary) {
+  const showArrow = ja&&en&&ja.name!==en.name
+  const enDisp = en?.name??ja?.name??'—'
+  const typesH=(primary.types??[]).map(t=>typeBadgeHTML(t)).join('')
+  const hpH=primary.hp?`<div class="hp-chip"><span class="hp-l">HP</span><span class="hp-v">${primary.hp}</span></div>`:''
+  const stageH=primary.stage?`<span class="stage-chip">${escHtml(primary.stage)}</span>`:''
+  return `
+  <div class="name-box">
+    <div class="name-box-tags">
+      ${primary.category?`<span class="cat-badge">${escHtml(primary.category)}</span>`:''}
+      ${primary.suffix?`<span style="font-size:0.7rem;font-family:var(--font-mono);color:var(--text-secondary)">${escHtml(primary.suffix)}</span>`:''}
+    </div>
+    <div class="name-pair">
+      <div class="name-item"><div class="lbl">Japanese</div><div class="name-ja">${escHtml(ja?.name??'—')}</div></div>
+      ${showArrow?`<span class="name-arrow">→</span><div class="name-item"><div class="lbl">English</div><div class="name-en">${escHtml(en.name)}</div></div>`:
+        `<div class="name-item"><div class="lbl">English</div><div class="name-en">${escHtml(enDisp)}</div></div>`}
+    </div>
+    <div class="stats-row">${typesH}${hpH}${stageH}</div>
+  </div>`
+}
+function descHTML(ja,en) {
+  if(!en?.description&&!ja?.description) return ''
+  return `<div class="pokedex-box">
+    <p class="sec-label">Pokédex Entry</p>
+    ${en?.description?`<p class="dex-en">${escHtml(en.description)}</p>`:''}
+    ${ja?.description&&ja.description!==en?.description?`<p class="dex-ja">${escHtml(ja.description)}</p>`:''}
+  </div>`
+}
+function trainerEffectHTML(ja, en) {
+  const primary = en ?? ja
+  const enEff   = en?.effect
+  const jaEff   = ja?.effect
+  if (!enEff && !jaEff) return ''
+  // Determine the sub-type label (Supporter, Item, Tool, Stadium…)
+  const subtype = primary?.suffix || primary?.trainerType || null
+  return `
+  <div class="trainer-effect-box">
+    ${subtype ? `<div class="trainer-effect-badge">${escHtml(subtype)}</div>` : ''}
+    ${enEff ? `<p class="trainer-effect-en">${escHtml(enEff)}</p>` : ''}
+    ${jaEff && jaEff !== enEff ? `
+      <div class="trainer-effect-ja">
+        <div class="trainer-effect-ja-lbl">日本語</div>
+        ${escHtml(jaEff)}
+      </div>` : ''}
+  </div>`
+}
+function attackRowHTML(jaA, enA) {
+  const atk=enA??jaA; if(!atk) return ''
+  const jaN=jaA?.name,enN=enA?.name,hasJA=!!jaN,hasEN=!!enN,diff=hasJA&&hasEN&&jaN!==enN
+  const costH=(atk.cost?.length?atk.cost.map(costDotHTML).join(''):`<span style="font-size:0.7rem;font-family:var(--font-mono);color:var(--text-secondary)">—</span>`)
+  const nameH=`${diff?`<span class="atk-ja">${escHtml(jaN)}</span><span class="atk-arrow">→</span>`:''}${hasEN?`<span class="atk-en">${escHtml(enN)}</span>`:(!hasEN&&hasJA?`<span class="atk-ja">${escHtml(jaN)}</span>`:'')}`
+  const dmgH=atk.damage?`<div class="atk-dmg">${escHtml(atk.damage)} damage</div>`:''
+  const enE=enA?.effect,jaE=jaA?.effect
+  const effH=(enE||jaE)?`<div class="atk-effects">${enE?`<div class="eff-box en"><span class="eff-lang en">EN</span><span style="color:var(--text-primary)">${escHtml(enE)}</span></div>`:''}${jaE&&jaE!==enE?`<div class="eff-box ja"><span class="eff-lang ja">JP</span><span class="font-jp" style="color:var(--text-secondary)">${escHtml(jaE)}</span></div>`:''}</div>`:''
+  return `<div class="attack-row"><div class="atk-head"><div class="atk-cost">${costH}</div><div class="atk-info"><div class="atk-names">${nameH}</div>${dmgH}</div></div>${effH}</div>`
+}
+function abilityRowHTML(jaAb, enAb) {
+  const ab=enAb??jaAb; if(!ab) return ''
+  const showJaN=jaAb&&jaAb.name!==enAb?.name
+  return `<div class="ability-row">
+    <div class="ab-head">
+      <span class="ab-type">${escHtml(ab.type)}</span>
+      <div class="ab-names">
+        ${showJaN?`<span class="ab-ja">${escHtml(jaAb.name)}</span>`:''} ${showJaN&&enAb?`<span class="atk-arrow">→</span>`:''}
+        <span class="ab-en">${escHtml(enAb?.name??jaAb?.name??'')}</span>
+      </div>
+    </div>
+    ${enAb?.effect?`<p class="ab-eff">${escHtml(enAb.effect)}</p>`:''}
+  </div>`
+}
+function wwrHTML(p) {
+  if(!p.weaknesses?.length&&!p.resistances?.length&&p.retreat===undefined) return ''
+  const wH=p.weaknesses?.length?p.weaknesses.map(w=>`<div style="display:flex;align-items:center;justify-content:center;gap:0.2rem">${typeBadgeHTML(w.type,true)}<span style="font-size:0.7rem;font-family:var(--font-mono);color:var(--gold)">${escHtml(w.value)}</span></div>`).join(''):`<span class="wwr-none">—</span>`
+  const rH=p.resistances?.length?p.resistances.map(r=>`<div style="display:flex;align-items:center;justify-content:center;gap:0.2rem">${typeBadgeHTML(r.type,true)}<span style="font-size:0.7rem;font-family:var(--font-mono);color:#66dd66">${escHtml(r.value)}</span></div>`).join(''):`<span class="wwr-none">—</span>`
+  const retH=p.retreat!==undefined?(p.retreat===0?`<span style="font-size:0.8rem;color:var(--text-secondary)">Free</span>`:`<div style="display:flex;justify-content:center;gap:0.1rem">${Array.from({length:p.retreat}).map(()=>costDotHTML('Colorless')).join('')}</div>`):`<span class="wwr-none">—</span>`
+  return `<div class="wwr-grid"><div><p class="wwr-lbl">Weakness</p><div class="wwr-val">${wH}</div></div><div><p class="wwr-lbl">Resistance</p><div class="wwr-val">${rH}</div></div><div><p class="wwr-lbl">Retreat</p><div class="wwr-val">${retH}</div></div></div>`
+}
+function noticeHTML(type) {
+  if(type==='approx') return `<div class="notice approx"><span class="n-icon">🔎</span><div><p class="n-title">Similar English Card Shown</p><p class="n-desc">This exact card wasn't found in the English database. Showing the closest English version — attacks and effects may differ.</p></div></div>`
+  return `<div class="notice ja-only"><span class="n-icon">ℹ️</span><div><p class="n-title">Japanese Exclusive</p><p class="n-desc">This card was not released in English. Showing Japanese data only.</p></div></div>`
+}
+
+// ═══════════════════════════════════════════════════
+// CAMERA / OCR
+// ═══════════════════════════════════════════════════
+function setMode(m) {
+  const isType = m==='type'
+  document.getElementById('tab-type').className='mode-tab'+(isType?' active':'')
+  document.getElementById('tab-scan').className='mode-tab'+(!isType?' active':'')
+  document.getElementById('mode-type').style.display = isType?'':'none'
+  document.getElementById('mode-scan').style.display = isType?'none':''
+  if(isType){ stopStream(); document.getElementById('search-input').focus() }
+  else resetScan()
+}
+function stopStream() {
+  mediaStream?.getTracks().forEach(t=>t.stop()); mediaStream=null
+  const v=document.getElementById('scan-video'); if(v){v.srcObject=null;v.style.display='none'}
+}
+function resetScan() {
+  stopStream(); scanStatus='idle'; scanExtracted=''
+  updateScanUI()
+}
+function updateScanUI() {
+  const els={
+    idle: document.getElementById('scan-idle'),
+    req:  document.getElementById('scan-req'),
+    proc: document.getElementById('scan-proc'),
+    ov:   document.getElementById('scan-live-ov'),
+    err:  document.getElementById('scan-err'),
+    res:  document.getElementById('scan-result'),
+    vid:  document.getElementById('scan-video'),
+    cvs:  document.getElementById('scan-canvas'),
+  }
+  Object.values(els).forEach(e=>{if(e) e.style.display='none'})
+  const ctrl=document.getElementById('scan-controls')
+
+  if(scanStatus==='idle'){
+    els.idle.style.display=''
+    ctrl.innerHTML=`<button class="btn-gold" onclick="startCamera()" style="flex:1">Open Camera</button>`
+  } else if(scanStatus==='requesting'){
+    els.req.style.display=''
+    ctrl.innerHTML=''
+  } else if(scanStatus==='live'){
+    els.vid.style.display='block'; els.ov.style.display=''
+    ctrl.innerHTML=`<button class="btn-gold" onclick="capturePhoto()" style="flex:1">📸 Capture</button>`
+  } else if(scanStatus==='captured'||scanStatus==='processing'){
+    els.cvs.style.display='block'
+    if(scanStatus==='processing'){els.proc.style.display=''}
+    ctrl.innerHTML=''
+  } else if(scanStatus==='done'){
+    els.cvs.style.display='block'; els.res.style.display=''
+    document.getElementById('scan-result-text').textContent=scanExtracted||'—'
+    ctrl.innerHTML=`<button class="btn-gold" onclick="useScanText()" style="flex:1">Use This Text</button><button class="btn-ghost" onclick="resetScan()" style="flex-shrink:0">Retry</button>`
+  } else if(scanStatus==='error'){
+    els.err.style.display=''
+    ctrl.innerHTML=`<button class="btn-ghost" onclick="resetScan()" style="flex:1">Try Again</button>`
+  }
+}
+async function startCamera() {
+  scanStatus='requesting'; updateScanUI()
+  try {
+    const stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment',width:{ideal:1280},height:{ideal:720}}})
+    mediaStream=stream
+    const v=document.getElementById('scan-video'); v.srcObject=stream; await v.play()
+    scanStatus='live'; updateScanUI()
+  } catch {
+    document.getElementById('scan-err-msg').textContent='Camera access denied. Please allow camera permission and try again.'
+    scanStatus='error'; updateScanUI()
+  }
+}
+function capturePhoto() {
+  const v=document.getElementById('scan-video'),c=document.getElementById('scan-canvas')
+  c.width=v.videoWidth; c.height=v.videoHeight
+  c.getContext('2d').drawImage(v,0,0)
+  stopStream(); scanStatus='captured'; updateScanUI(); runOCR(c)
+}
+function handleScanBtn() {
+  if(scanStatus==='idle') startCamera()
+  else if(scanStatus==='live') capturePhoto()
+  else if(scanStatus==='error') resetScan()
+}
+async function runOCR(canvas) {
+  scanStatus='processing'; updateScanUI()
+  try {
+    if(!window.Tesseract) await loadScript('https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js')
+    const worker=await Tesseract.createWorker('jpn',1,{
+      logger:m=>{
+        if(m.status==='recognizing text'){
+          const p=Math.round(m.progress*100)
+          document.getElementById('scan-proc-text').textContent=`Reading Japanese text… ${p}%`
+          document.getElementById('scan-prog-fill').style.width=`${p}%`
+        }
+      }
+    })
+    const {data}=await worker.recognize(canvas)
+    await worker.terminate()
+    scanExtracted=data.text.split('\n').map(l=>l.trim()).filter(l=>l).join(' ').trim()
+    scanStatus='done'; updateScanUI()
+  } catch {
+    document.getElementById('scan-err-msg').textContent='OCR failed. Please try again with a clearer image.'
+    scanStatus='error'; updateScanUI()
+  }
+}
+function useScanText() {
+  if(!scanExtracted) return
+  setMode('type')
+  document.getElementById('search-input').value=scanExtracted
+  clearTimeout(debounceTimer)
+  doSearch(scanExtracted)
+}
+function loadScript(src) {
+  return new Promise((res,rej)=>{const s=document.createElement('script');s.src=src;s.onload=res;s.onerror=rej;document.head.appendChild(s)})
+}
+
+// ═══════════════════════════════════════════════════
+// UI HELPERS
+// ═══════════════════════════════════════════════════
+function show(id) { document.getElementById(id)?.classList.remove('hidden') }
+function hide(id) { document.getElementById(id)?.classList.add('hidden') }
+function showEmpty() { hide('results-section'); hide('no-results'); hide('skeleton-section'); show('empty-state') }
+function showError(msg) { document.getElementById('error-text').textContent=msg; show('error-banner') }
+function clearError() { hide('error-banner') }
+function escHtml(s) { if(s==null)return ''; return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;') }
+function escAtt(s) { if(s==null)return ''; return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;') }
+
+// ═══════════════════════════════════════════════════
+// PERSISTENCE
+// ═══════════════════════════════════════════════════
+function saveLS(key, data) { try { localStorage.setItem(key, JSON.stringify(data)) } catch {} }
+function loadLS(key) { try { const v=localStorage.getItem(key); return v?JSON.parse(v):null } catch { return null } }
+
+// Search result cache — persists across page reloads, 1-hour TTL
+const LS_CACHE_TTL = 60 * 60 * 1000  // 1 hour in ms
+function lsCacheGet(query) {
+  try {
+    const raw = localStorage.getItem('cs_q_' + query)
+    if (!raw) return null
+    const { ts, data } = JSON.parse(raw)
+    if (Date.now() - ts > LS_CACHE_TTL) { localStorage.removeItem('cs_q_' + query); return null }
+    return data
+  } catch { return null }
+}
+function lsCacheSet(query, data) {
+  try { localStorage.setItem('cs_q_' + query, JSON.stringify({ ts: Date.now(), data })) } catch {}
+}
+
+// Card detail cache — persists across reloads, same 1-hour TTL
+function lsDetailGet(id) {
+  try {
+    const raw = localStorage.getItem('cs_detail_' + id)
+    if (!raw) return null
+    const { ts, data } = JSON.parse(raw)
+    if (Date.now() - ts > LS_CACHE_TTL) { localStorage.removeItem('cs_detail_' + id); return null }
+    return data
+  } catch { return null }
+}
+function lsDetailSet(id, data) {
+  try { localStorage.setItem('cs_detail_' + id, JSON.stringify({ ts: Date.now(), data })) } catch {}
+}
+
+// ═══════════════════════════════════════════════════
+// DECK MANAGEMENT
+// ═══════════════════════════════════════════════════
+function createNewDeck() {
+  const name = prompt('New deck name:', `Deck ${decks.length + 1}`)
+  if (!name?.trim()) return
+  const nd = { id: uid(), name: name.trim(), cards: [] }
+  decks.push(nd)
+  activeDeckId = nd.id
+  saveDecks()
+  renderDeckPanel()
+  if (document.getElementById('builder-root')?.firstChild) {
+    renderBuilderTabs()
+    renderBuilderRight()
+  }
+}
+
+function switchActiveDeck(id) {
+  activeDeckId = id
+  saveDecks()
+  renderDeckPanel()
+  if (document.getElementById('builder-root')?.firstChild) {
+    renderBuilderTabs()
+    renderBuilderRight()
+    document.getElementById('db-deck-name').value = getActiveDeck()?.name || ''
+    updateBuilderProgress()
+  }
+}
+
+function deleteDeck(id) {
+  if (decks.length <= 1) { showToast('Cannot delete the only deck'); return }
+  if (!confirm(`Delete "${decks.find(d=>d.id===id)?.name}"?`)) return
+  decks = decks.filter(d => d.id !== id)
+  if (activeDeckId === id) activeDeckId = decks[0].id
+  saveDecks()
+  renderDeckPanel()
+  renderBuilderTabs()
+  renderBuilderRight()
+}
+
+function renameDeck(val) {
+  const d = getActiveDeck()
+  if (!d) return
+  d.name = val.trim() || d.name
+  saveDecks()
+  renderBuilderTabs()
+}
+
+function clearActiveDeck() {
+  if (!confirm('Clear all cards from this deck?')) return
+  getActiveDeck().cards = []
+  syncDeck()
+  saveDecks()
+  renderDeckPanel()
+  renderBuilderLeft()    // refresh box panel — grey state clears since deckQty → 0
+  renderBuilderRight()
+  updateBuilderProgress()
+}
+
+// ═══════════════════════════════════════════════════
+// DECK BUILDER
+// ═══════════════════════════════════════════════════
+function openBuilder() {
+  document.body.style.overflow = 'hidden'
+  document.getElementById('builder-root').innerHTML = `
+  <div class="builder-page" id="builder-page">
+    <!-- Header -->
+    <div class="builder-header">
+      <button class="builder-back" onclick="closeBuilder()">← Back</button>
+      <div class="builder-tabs" id="builder-tabs"></div>
+      <button class="builder-tab-add" onclick="createNewDeck()" title="New deck">+ New</button>
+      <div style="flex-shrink:0;display:flex;gap:0.5rem;margin-left:0.5rem">
+        <button class="btn-ghost" onclick="shareDeck()" style="font-size:0.65rem;padding:0.25rem 0.65rem;border-color:rgba(238,238,238,0.22);color:rgba(238,238,238,0.7)">🔗 Share</button>
+        <button class="btn-gold" onclick="closeBuilder()" style="font-size:0.65rem;padding:0.25rem 0.65rem">✓ Done</button>
+      </div>
+    </div>
+    <!-- Body -->
+    <div class="builder-body">
+      <!-- Left: Box -->
+      <div class="builder-left">
+        <div class="builder-col-header">
+          <span class="builder-col-title">📦 My Box</span>
+          <span class="builder-col-meta" id="db-box-count">0 cards</span>
+        </div>
+        <div class="builder-grid" id="db-box-grid"
+          ondragover="event.preventDefault()"
+          ondrop="dbDropToBox(event)"></div>
+      </div>
+      <!-- Right: Deck -->
+      <div class="builder-right">
+        <div class="builder-col-header">
+          <div>
+            <input class="builder-name-input" id="db-deck-name"
+              value="${escHtml(getActiveDeck()?.name||'My Deck')}"
+              onchange="renameDeck(this.value)" placeholder="Deck name…">
+            <div class="builder-col-meta" id="db-deck-count">0/60</div>
+          </div>
+          <button onclick="clearActiveDeck()" title="Clear deck" style="font-size:0.85rem;color:var(--text-secondary);padding:0.2rem 0.35rem;border-radius:0.2rem;transition:color 0.15s" onmouseover="this.style.color='var(--red)'" onmouseout="this.style.color='var(--text-secondary)'">🗑</button>
+        </div>
+        <div class="builder-deck-list" id="db-deck-list"
+          ondragover="event.preventDefault()"
+          ondrop="dbDropToDeck(event)"></div>
+        <div class="builder-footer">
+          <div class="builder-prog"><div class="builder-prog-fill" id="db-prog" style="width:0%"></div></div>
+          <span style="font-size:0.62rem;font-family:var(--font-mono);color:var(--text-secondary);white-space:nowrap" id="db-slots">60 remaining</span>
+        </div>
+      </div>
+    </div>
+  </div>`
+  renderBuilderTabs()
+  renderBuilderLeft()
+  renderBuilderRight()
+}
+
+function closeBuilder() {
+  document.getElementById('builder-root').innerHTML = ''
+  document.body.style.overflow = ''
+}
+
+function renderBuilderTabs() {
+  const c = document.getElementById('builder-tabs')
+  if (!c) return
+  c.innerHTML = decks.map(d => `
+    <button class="builder-tab${d.id===activeDeckId?' active':''}" onclick="switchActiveDeck('${escAtt(d.id)}')">${escHtml(d.name)}</button>
+  `).join('')
+}
+
+function renderBuilderLeft() {
+  const grid = document.getElementById('db-box-grid')
+  const cnt  = document.getElementById('db-box-count')
+  if (!grid) return
+  const total = box.reduce((s,e)=>s+e.qty, 0)
+  if (cnt) cnt.textContent = `${box.length} unique · ${total} total`
+
+  if (box.length === 0) {
+    grid.innerHTML = `<div class="builder-empty" style="grid-column:1/-1"><div class="builder-empty-icon">📦</div><p class="builder-empty-text">Add cards to your box via search results</p></div>`
+    return
+  }
+  grid.innerHTML = box.map(({card, qty}) => {
+    const imgSrc  = card.image ? `${card.image}/low.webp` : null
+    const eid     = escAtt(card.id)
+    const lang    = escAtt(card._lang || 'en')
+    const dkQty   = getDeck().find(e=>e.card.id===card.id)?.qty ?? 0
+    const allUsed = dkQty >= qty
+    const available = Math.max(0, qty - dkQty)
+    return `
+    <div class="builder-card${allUsed?' all-used':''}" draggable="true"
+      onclick="cardClick('${eid}','${lang}',event)"
+      ondragstart="dbDragStart(event,'${eid}')"
+      ondragend="dbDragEnd(event)"
+      onmousedown="startHold(event,'${eid}','${lang}')" onmouseup="cancelHold()" onmouseleave="cancelHold()"
+      ontouchstart="startHold(event,'${eid}','${lang}')" ontouchend="cancelHold()" ontouchcancel="cancelHold()">
+      <div class="builder-card-img" style="position:relative">
+        ${imgSrc
+          ? `<img src="${escAtt(imgSrc)}" alt="${escHtml(card.name)}" onerror="this.style.display='none'">`
+          : `<div class="no-img"><span>🃏</span></div>`}
+        ${dkQty > 0 ? `<div class="builder-used-badge">${dkQty}/${qty} in deck</div>` : ''}
+      </div>
+      <div class="builder-card-foot">
+        <div class="builder-card-name">${escHtml(card.name)}</div>
+        <div class="builder-card-meta">${allUsed ? '✓ all used' : `×${available} available`}</div>
+      </div>
+    </div>`
+  }).join('')
+}
+
+function renderBuilderRight() {
+  const list = document.getElementById('db-deck-list')
+  const cnt  = document.getElementById('db-deck-count')
+  if (!list) return
+  const d     = getDeck()
+  const total = d.reduce((s,e)=>s+e.qty, 0)
+  if (cnt) cnt.textContent = `${total}/60 cards`
+  updateBuilderProgress()
+
+  if (d.length === 0) {
+    list.innerHTML = `
+      <div class="builder-drop-hint" id="db-drop-hint"
+        ondragover="event.preventDefault();this.classList.add('over')"
+        ondragleave="this.classList.remove('over')"
+        ondrop="dbDropToDeck(event);this.classList.remove('over')">
+        Drag cards from your box here<br>or use the + buttons in search results
+      </div>`
+    return
+  }
+
+  list.innerHTML = d.map(({card, qty}) => {
+    const imgSrc = card.image ? `${card.image}/low.webp` : null
+    const eid    = escAtt(card.id)
+    const lang   = escAtt(card._lang || 'en')
+    return `
+    <div class="builder-deck-entry"
+      onclick="cardClick('${eid}','${lang}',event)"
+      onmousedown="startHold(event,'${eid}','${lang}')" onmouseup="cancelHold()" onmouseleave="cancelHold()"
+      ontouchstart="startHold(event,'${eid}','${lang}')" ontouchend="cancelHold()" ontouchcancel="cancelHold()"
+      ondragover="event.preventDefault();this.classList.add('drag-over')"
+      ondragleave="this.classList.remove('drag-over')"
+      ondrop="dbDropToDeck(event);this.classList.remove('drag-over')">
+      ${imgSrc
+        ? `<img class="builder-entry-img" src="${escAtt(imgSrc)}" alt="${escHtml(card.name)}" onerror="this.style.display='none'">`
+        : `<div class="builder-entry-img-ph">🃏</div>`}
+      <span class="builder-entry-name">${escHtml(card.name)}</span>
+      <div class="builder-entry-qty">
+        <button class="builder-entry-btn" onclick="qtyChange('deck','${eid}',-1)">−</button>
+        <span class="builder-entry-num">${qty}</span>
+        <button class="builder-entry-btn" onclick="qtyChange('deck','${eid}',1)">+</button>
+      </div>
+    </div>`
+  }).join('')
+}
+
+function updateBuilderProgress() {
+  const prog  = document.getElementById('db-prog')
+  const slots = document.getElementById('db-slots')
+  if (!prog) return
+  const total = getDeck().reduce((s,e)=>s+e.qty, 0)
+  prog.style.width = `${Math.min(total/60*100,100)}%`
+  if (slots) slots.textContent = `${60-total} remaining`
+}
+
+// ── Drag & drop ─────────────────────────────────────
+let dragCardId = null
+
+function dbDragStart(e, cardId) {
+  cancelHold()             // kill any pending hold preview when drag starts
+  wasJustDragged = true    // suppress the click event that fires after drag
+  dragCardId = cardId
+  e.currentTarget.classList.add('dragging')
+  e.dataTransfer.effectAllowed = 'copy'
+  e.dataTransfer.setData('text/plain', cardId)
+}
+function dbDragEnd(e) {
+  e.currentTarget.classList.remove('dragging')
+  dragCardId = null
+  // Reset after a tick so the post-drag click event still sees wasJustDragged=true,
+  // then clears it for the next genuine click
+  setTimeout(() => { wasJustDragged = false }, 50)
+}
+function dbDropToDeck(e) {
+  e.preventDefault()
+  e.stopPropagation()   // prevent bubbling to parent list's ondrop — stops the double-add bug
+  const id = e.dataTransfer.getData('text/plain') || dragCardId
+  if (!id) return
+  qtyChange('deck', id, 1)
+}
+function dbDropToBox(e) {
+  e.preventDefault()
+  const id = e.dataTransfer.getData('text/plain') || dragCardId
+  if (!id) return
+  // dropping box card back to box = no-op; dropping deck card to box removes from deck
+  // (deck cards aren't draggable from the deck list, so this is generally no-op)
+}
+
+// ═══════════════════════════════════════════════════
+// CARD HOLD PREVIEW (350ms hold → floating popup)
+// ═══════════════════════════════════════════════════
+let holdTimer      = null
+let holdFired      = false   // true when the 350ms threshold was crossed; suppresses click
+let wasJustDragged = false   // true immediately after a drag; suppresses click
+
+// ── Universal card click handler (used everywhere) ──────────────────────
+// Click  → open full modal
+// Hold   → popup already showed; this click is suppressed
+// Drag   → drag already happened; this click is suppressed
+function cardClick(cardId, lang, e) {
+  if (e && e.target && e.target.closest('button')) return  // qty/control buttons
+  if (holdFired)      { holdFired = false; return }        // was a hold, not a click
+  if (wasJustDragged) { return }                           // was a drag, not a click
+  openModal(cardId, lang)
+}
+
+function startHold(e, cardId, lang) {
+  if (e.target.closest('button')) return  // don't intercept button clicks
+  clearTimeout(holdTimer)
+  holdFired = false
+  const pos = getHoldPos(e)
+  holdTimer = setTimeout(() => {
+    holdFired = true
+    fetchAndShowPreview(cardId, lang, pos.x, pos.y)
+  }, 350)
+}
+
+function cancelHold() {
+  clearTimeout(holdTimer)
+  holdTimer = null
+  hidePreviewPopup()
+  // Note: holdFired is intentionally NOT reset here — the subsequent click event reads it
+}
+
+function getHoldPos(e) {
+  if (e.touches && e.touches[0]) return { x: e.touches[0].clientX, y: e.touches[0].clientY }
+  return { x: e.clientX, y: e.clientY }
+}
+
+async function fetchAndShowPreview(cardId, lang, x, y) {
+  // Check memory + localStorage cache first (same cache openModal uses)
+  let detail = cardDetailCache.get(cardId)
+  if (!detail) {
+    const p = lsDetailGet(cardId)
+    if (p) { cardDetailCache.set(cardId, p); detail = p }
+  }
+  if (detail) { showPreviewPopup(detail, x, y); return }
+
+  // Show loading skeleton while fetching
+  const loading = _createPopupEl()
+  loading.innerHTML = `<div class="cpop-loading">⏳ Loading…</div>`
+  _positionPopup(loading, x, y)
+  document.body.appendChild(loading)
+
+  try {
+    let ja = null, en = null
+    if (lang === 'en') {
+      const r = await fetch(`https://api.tcgdex.net/v2/en/cards/${encodeURIComponent(cardId)}`).catch(()=>null)
+      if (r?.ok) en = await r.json()
+    } else {
+      const r = await fetch(`https://api.tcgdex.net/v2/ja/cards/${encodeURIComponent(cardId)}`).catch(()=>null)
+      if (r?.ok) ja = await r.json()
+      if (ja) {
+        const enId = toEnglishCardId(cardId)
+        if (enId) {
+          const er = await fetch(`https://api.tcgdex.net/v2/en/cards/${enId}`).catch(()=>null)
+          if (er?.ok) en = await er.json()
+        }
+      }
+    }
+    if (!ja && !en) { hidePreviewPopup(); return }
+    detail = { ja, en }
+    cardDetailCache.set(cardId, detail)
+    lsDetailSet(cardId, detail)
+    showPreviewPopup(detail, x, y)
+  } catch { hidePreviewPopup() }
+}
+
+function _createPopupEl() {
+  hidePreviewPopup()
+  const el = document.createElement('div')
+  el.className = 'card-preview-popup'
+  el.id = 'card-preview-popup'
+  return el
+}
+
+function _positionPopup(el, x, y) {
+  const W = window.innerWidth, H = window.innerHeight
+  const pw = 224, ph = 400
+  let left = x + 18
+  let top  = y - Math.round(ph / 2)
+  if (left + pw > W - 8) left = x - pw - 18
+  if (left < 8)          left = 8
+  if (top  < 8)          top  = 8
+  if (top + ph > H - 8)  top  = H - ph - 8
+  el.style.left = left + 'px'
+  el.style.top  = top  + 'px'
+}
+
+function showPreviewPopup(detail, x, y) {
+  const p  = detail.en ?? detail.ja
+  if (!p) { hidePreviewPopup(); return }
+  const ja = detail.ja
+
+  const imgUrl     = p.image ? p.image + '/low.webp' : null
+  const isTrainer  = p.category === 'Trainer' || (!p.hp && !!p.effect)
+  const attacks    = isTrainer ? [] : (p.attacks || []).slice(0, 2)
+  const hasWWR     = !isTrainer && (p.weaknesses?.length || p.resistances?.length || p.retreat !== undefined)
+
+  const weakV = p.weaknesses?.length  ? p.weaknesses.map(w=>`${w.type} ${w.value}`).join(', ') : '—'
+  const resV  = p.resistances?.length ? p.resistances.map(r=>`${r.type} ${r.value}`).join(', ') : '—'
+  const retV  = p.retreat !== undefined ? (p.retreat === 0 ? 'Free' : '×' + p.retreat) : '—'
+
+  // Trainer card effect text (EN + JP)
+  const trainerH = isTrainer && p.effect ? `
+    <div style="margin-top:0.35rem;padding:0.4rem 0.5rem;background:var(--surface-alt);border:1px solid var(--border-subtle);border-radius:0.35rem">
+      ${p.suffix ? `<div style="font-size:0.55rem;font-family:var(--font-mono);color:var(--red);text-transform:uppercase;letter-spacing:0.08em;font-weight:700;margin-bottom:0.2rem">${escHtml(p.suffix)}</div>` : ''}
+      <div style="font-size:0.65rem;line-height:1.55;color:var(--text-primary)">${escHtml(p.effect.length > 120 ? p.effect.slice(0,120)+'…' : p.effect)}</div>
+      ${ja?.effect && ja.effect !== p.effect ? `<div style="font-size:0.6rem;font-family:var(--font-jp);color:var(--text-secondary);margin-top:0.3rem;padding-top:0.3rem;border-top:1px solid var(--border-subtle)">${escHtml(ja.effect.length > 100 ? ja.effect.slice(0,100)+'…' : ja.effect)}</div>` : ''}
+    </div>` : ''
+
+  const atksH = attacks.map(a => `
+    <div class="cpop-atk">
+      <div class="cpop-atk-head">
+        <span class="cpop-atk-name">${escHtml(a.name)}</span>
+        ${a.damage ? `<span class="cpop-atk-dmg">${escHtml(String(a.damage))}</span>` : ''}
+      </div>
+      ${a.effect ? `<div class="cpop-atk-eff">${escHtml(a.effect.length > 72 ? a.effect.slice(0,72)+'…' : a.effect)}</div>` : ''}
+    </div>`).join('')
+
+  const popup = _createPopupEl()
+  popup.innerHTML = `
+    ${imgUrl ? `<div class="cpop-img"><img src="${escAtt(imgUrl)}" alt="${escHtml(p.name)}" onerror="this.parentElement.style.display='none'"></div>` : ''}
+    <div class="cpop-name">${escHtml(p.name)}</div>
+    ${ja?.name && ja.name !== p.name ? `<div class="cpop-jp">${escHtml(ja.name)}</div>` : ''}
+    <div class="cpop-stats">
+      ${p.hp    ? `<span style="font-size:0.62rem;font-family:var(--font-mono);font-weight:700;color:var(--red)">HP ${escHtml(String(p.hp))}</span>` : ''}
+      ${p.stage ? `<span style="font-size:0.58rem;font-family:var(--font-mono);color:var(--text-secondary);border:1px solid var(--border-mid);border-radius:0.2rem;padding:0.05rem 0.3rem">${escHtml(p.stage)}</span>` : ''}
+      ${isTrainer && p.category ? `<span style="font-size:0.58rem;font-family:var(--font-mono);color:var(--red);border:1px solid rgba(215,35,35,0.3);border-radius:0.2rem;padding:0.05rem 0.3rem">${escHtml(p.category)}</span>` : ''}
+    </div>
+    ${trainerH}
+    ${atksH}
+    ${hasWWR ? `
+    <div class="cpop-wwr">
+      <div class="cpop-wwr-cell"><div class="cpop-wwr-lbl">Weak</div><div class="cpop-wwr-val">${escHtml(weakV)}</div></div>
+      <div class="cpop-wwr-cell"><div class="cpop-wwr-lbl">Resist</div><div class="cpop-wwr-val">${escHtml(resV)}</div></div>
+      <div class="cpop-wwr-cell"><div class="cpop-wwr-lbl">Retreat</div><div class="cpop-wwr-val">${escHtml(retV)}</div></div>
+    </div>` : ''}
+  `
+  _positionPopup(popup, x, y)
+  document.body.appendChild(popup)
+}
+
+function hidePreviewPopup() {
+  document.getElementById('card-preview-popup')?.remove()
+}
+
+// ═══════════════════════════════════════════════════
+// DECK VIEWER PAGE (full-screen translation reference)
+// ═══════════════════════════════════════════════════
+function openViewer() {
+  const d = getDeck()
+  if (d.length === 0) { showToast('Your deck is empty — add cards first'); return }
+  document.body.style.overflow = 'hidden'
+  const deckName = getActiveDeck()?.name || 'My Deck'
+  const total    = d.reduce((s,e) => s + e.qty, 0)
+  const root = document.getElementById('viewer-root')
+  root.innerHTML = `
+  <div class="viewer-page" id="viewer-page">
+    <div class="viewer-header">
+      <div>
+        <div class="viewer-title">${escHtml(deckName)}</div>
+        <div class="viewer-subtitle">${total} card${total !== 1 ? 's' : ''} · tap/click to view translation</div>
+      </div>
+      <button onclick="closeViewer()" style="color:#fff;font-size:1.25rem;opacity:0.55;padding:0.25rem 0.6rem;border-radius:0.375rem;transition:opacity 0.15s;flex-shrink:0" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.55" aria-label="Close viewer">✕</button>
+    </div>
+    <div class="viewer-body">
+      <div class="viewer-grid" id="viewer-grid"></div>
+    </div>
+  </div>`
+  renderViewerGrid()
+}
+
+function closeViewer() {
+  document.getElementById('viewer-root').innerHTML = ''
+  document.body.style.overflow = ''
+}
+
+function renderViewerGrid() {
+  const grid = document.getElementById('viewer-grid')
+  if (!grid) return
+  const d = getDeck()
+  grid.innerHTML = d.map(({card, qty}) => {
+    const imgSrc = card.image ? card.image + '/low.webp' : null
+    const eid    = escAtt(card.id)
+    const lang   = escAtt(card._lang || 'en')
+    return `
+    <div class="viewer-card" onclick="openViewerCard('${eid}','${lang}')">
+      <div class="viewer-card-img">
+        ${imgSrc
+          ? `<img src="${escAtt(imgSrc)}" alt="${escHtml(card.name)}" onerror="this.style.display='none'">`
+          : `<div class="no-img"><span style="font-size:1.8rem">🃏</span></div>`}
+        ${qty > 1 ? `<span class="viewer-count-badge">×${qty}</span>` : ''}
+      </div>
+      <div class="viewer-card-info">
+        <div class="viewer-card-name">${escHtml(card.name)}</div>
+      </div>
+    </div>`
+  }).join('')
+}
+
+async function openViewerCard(cardId, lang) {
+  const vp = document.getElementById('viewer-page')
+  if (!vp) return
+  // Remove any previous overlay
+  vp.querySelector('.viewer-trans-overlay')?.remove()
+
+  const overlay = document.createElement('div')
+  overlay.className = 'viewer-trans-overlay'
+  overlay.addEventListener('click', e => { if (e.target === overlay) closeViewerCard() })
+
+  overlay.innerHTML = `
+  <div class="viewer-trans-panel">
+    <div class="vtrans-loading">
+      <div class="spinner" style="margin:0 auto 1rem"></div>
+      <p style="font-size:0.75rem;font-family:var(--font-mono);color:var(--text-secondary);text-align:center">Loading translation…</p>
+    </div>
+  </div>`
+  vp.appendChild(overlay)
+
+  // Try cache first
+  let detail = cardDetailCache.get(cardId)
+  if (!detail) {
+    const p = lsDetailGet(cardId)
+    if (p) { cardDetailCache.set(cardId, p); detail = p }
+  }
+
+  if (!detail) {
+    try {
+      let ja = null, en = null
+      if (lang === 'en') {
+        const r = await fetch(`https://api.tcgdex.net/v2/en/cards/${encodeURIComponent(cardId)}`).catch(()=>null)
+        if (r?.ok) en = await r.json()
+      } else {
+        const r = await fetch(`https://api.tcgdex.net/v2/ja/cards/${encodeURIComponent(cardId)}`).catch(()=>null)
+        if (r?.ok) ja = await r.json()
+        if (ja) {
+          const enId = toEnglishCardId(cardId)
+          if (enId) {
+            const er = await fetch(`https://api.tcgdex.net/v2/en/cards/${enId}`).catch(()=>null)
+            if (er?.ok) en = await er.json()
+          }
+        }
+      }
+      if (ja || en) {
+        detail = { ja, en }
+        cardDetailCache.set(cardId, detail)
+        lsDetailSet(cardId, detail)
+      }
+    } catch {}
+  }
+
+  const panel = overlay.querySelector('.viewer-trans-panel')
+
+  if (!detail) {
+    panel.innerHTML = `
+      <p style="text-align:center;color:#f88;font-size:0.85rem;padding:1rem 0">Could not load card data</p>
+      <div style="text-align:center"><button class="btn-ghost" onclick="closeViewerCard()">Close</button></div>`
+    return
+  }
+
+  const p         = detail.en ?? detail.ja
+  const ja        = detail.ja
+  const imgUrl    = p.image ? p.image + '/low.webp' : null
+  const isTrainer = p.category === 'Trainer' || (!p.hp && !!p.effect)
+  const attacks   = isTrainer ? [] : (p.attacks || [])
+  const ability   = isTrainer ? null : (p.abilities?.[0] || null)
+
+  const hasWWR = !isTrainer && (p.weaknesses?.length || p.resistances?.length || p.retreat !== undefined)
+  const weakV  = p.weaknesses?.length  ? p.weaknesses.map(w=>`${w.type} ${w.value}`).join(', ') : '—'
+  const resV   = p.resistances?.length ? p.resistances.map(r=>`${r.type} ${r.value}`).join(', ') : '—'
+  const retV   = p.retreat !== undefined ? (p.retreat === 0 ? 'Free' : '×' + p.retreat) : '—'
+
+  const statsH = [
+    p.hp    ? `<span style="font-size:0.72rem;font-family:var(--font-mono);font-weight:700;color:var(--red)">HP ${escHtml(String(p.hp))}</span>` : '',
+    p.stage ? `<span style="font-size:0.65rem;font-family:var(--font-mono);color:var(--text-secondary);border:1px solid var(--border-mid);border-radius:0.25rem;padding:0.1rem 0.4rem">${escHtml(p.stage)}</span>` : '',
+    ...(p.types || []).map(t => typeBadgeHTML(t))
+  ].filter(Boolean).join('')
+
+  // ── Trainer card effect (EN + JP) ──────────────────
+  const trainerEffH = isTrainer ? (() => {
+    const enEff = p.effect
+    const jaEff = ja?.effect
+    const subtype = p.suffix || p.trainerType || null
+    if (!enEff && !jaEff) return ''
+    return `
+    <p class="vtrans-section">${escHtml(subtype || 'Trainer')} Effect</p>
+    <div class="trainer-effect-box" style="margin:0">
+      ${enEff ? `<p class="trainer-effect-en">${escHtml(enEff)}</p>` : ''}
+      ${jaEff && jaEff !== enEff ? `
+        <div class="trainer-effect-ja">
+          <div class="trainer-effect-ja-lbl">日本語</div>
+          ${escHtml(jaEff)}
+        </div>` : ''}
+    </div>`
+  })() : ''
+
+  const abilityH = ability ? `
+    <p class="vtrans-section">Ability</p>
+    <div class="vtrans-attack" style="border-left:3px solid #9966ff">
+      <div class="vtrans-atk-head">
+        <span style="font-size:0.6rem;font-family:var(--font-mono);color:#9966ff;text-transform:uppercase;font-weight:700;letter-spacing:0.08em;flex-shrink:0">${escHtml(ability.type||'Ability')}</span>
+        <span class="vtrans-atk-name">${escHtml(ability.name)}</span>
+      </div>
+      ${ability.effect ? `<div class="vtrans-atk-eff">${escHtml(ability.effect)}</div>` : ''}
+    </div>` : ''
+
+  const atksH = attacks.map(a => {
+    const costH = a.cost?.length ? a.cost.map(costDotHTML).join('') : ''
+    return `
+    <div class="vtrans-attack">
+      <div class="vtrans-atk-head">
+        <div class="vtrans-atk-cost">${costH}</div>
+        <span class="vtrans-atk-name">${escHtml(a.name)}</span>
+        ${a.damage ? `<span class="vtrans-atk-dmg">${escHtml(String(a.damage))}</span>` : ''}
+      </div>
+      ${a.effect ? `<div class="vtrans-atk-eff">${escHtml(a.effect)}</div>` : ''}
+    </div>`
+  }).join('')
+
+  panel.innerHTML = `
+    <div class="vtrans-header">
+      ${imgUrl ? `<div class="vtrans-img"><img src="${escAtt(imgUrl)}" alt="${escHtml(p.name)}" onerror="this.style.display='none'"></div>` : ''}
+      <div class="vtrans-names">
+        ${ja?.name ? `<div class="vtrans-jp">${escHtml(ja.name)}</div>` : ''}
+        <div class="vtrans-en">${escHtml(p.name)}</div>
+        <div class="vtrans-stats">${statsH}</div>
+      </div>
+      <button class="vtrans-close" onclick="closeViewerCard()" aria-label="Close">✕</button>
+    </div>
+    ${trainerEffH}
+    ${abilityH}
+    ${attacks.length ? `<p class="vtrans-section">Attacks</p>${atksH}` : ''}
+    ${hasWWR ? `
+    <p class="vtrans-section">Weakness / Resistance / Retreat</p>
+    <div class="vtrans-wwr">
+      <div class="vtrans-wwr-cell"><div class="vtrans-wwr-lbl">Weakness</div><div class="vtrans-wwr-val">${escHtml(weakV)}</div></div>
+      <div class="vtrans-wwr-cell"><div class="vtrans-wwr-lbl">Resistance</div><div class="vtrans-wwr-val">${escHtml(resV)}</div></div>
+      <div class="vtrans-wwr-cell"><div class="vtrans-wwr-lbl">Retreat</div><div class="vtrans-wwr-val">${escHtml(retV)}</div></div>
+    </div>` : ''}
+  `
+}
+
+function closeViewerCard() {
+  document.querySelector('.viewer-trans-overlay')?.remove()
+}
+
+// ═══════════════════════════════════════════════════
+// SHARE LINK
+// ═══════════════════════════════════════════════════
+function shareDeck() {
+  const d = getActiveDeck()
+  if (!d) return
+  const payload = {
+    n: d.name,
+    c: d.cards.map(e => ({ i:e.card.id, q:e.qty, n:e.card.name, img:e.card.image, li:e.card.localId, la:e.card._lang }))
+  }
+  try {
+    const encoded = btoa(unescape(encodeURIComponent(JSON.stringify(payload))))
+    const url = window.location.href.split('#')[0] + '#deck=' + encoded
+    navigator.clipboard.writeText(url).catch(()=>{})
+    showToast('🔗 Share link copied to clipboard!')
+  } catch { showToast('Failed to generate share link') }
+}
+
+function checkShareHash() {
+  const hash = window.location.hash
+  if (!hash.startsWith('#deck=')) return
+  try {
+    const raw = decodeURIComponent(escape(atob(hash.slice(6))))
+    const payload = JSON.parse(raw)
+    if (!payload?.n || !Array.isArray(payload?.c)) return
+    const total = payload.c.reduce((s,c)=>s+c.q, 0)
+    const root  = document.getElementById('import-banner-root')
+    root.innerHTML = `
+    <div class="import-banner">
+      <span style="font-size:1.2rem">🃏</span>
+      <span class="import-banner-text">Import shared deck <span class="import-banner-name">"${escHtml(payload.n)}"</span> — ${total} card${total!==1?'s':''}?</span>
+      <button class="btn-gold" onclick="importDeck()" style="font-size:0.72rem;padding:0.3rem 0.75rem;flex-shrink:0">Import</button>
+      <button class="btn-ghost" onclick="dismissImport()" style="font-size:0.72rem;padding:0.3rem 0.6rem;flex-shrink:0">✕</button>
+    </div>`
+    window._pendingImport = payload
+    // Clean URL without reload
+    window.history.replaceState(null, '', window.location.href.split('#')[0])
+  } catch { /* bad hash */ }
+}
+
+function importDeck() {
+  const p = window._pendingImport
+  if (!p) return
+  const cards = p.c.map(c => ({
+    card: { id:c.i, name:c.n, image:c.img, localId:c.li, _lang:c.la||'en' },
+    qty: c.q
+  }))
+  const nd = { id: uid(), name: p.n + ' (imported)', cards }
+  decks.push(nd)
+  activeDeckId = nd.id
+  saveDecks()
+  renderDeckPanel()
+  dismissImport()
+  showToast(`Imported "${p.n}" · ${p.c.reduce((s,c)=>s+c.q,0)} cards`)
+  window._pendingImport = null
+}
+
+function dismissImport() {
+  document.getElementById('import-banner-root').innerHTML = ''
+  window._pendingImport = null
+}
+
+// ═══════════════════════════════════════════════════
+// TOAST
+// ═══════════════════════════════════════════════════
+function showToast(msg) {
+  const t = document.createElement('div')
+  t.className = 'cs-toast'
+  t.textContent = msg
+  document.body.appendChild(t)
+  setTimeout(() => t.remove(), 2600)
+}
+
+// ═══════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════
+document.getElementById('mode-scan').style.display = 'none'
+syncDeck()
+renderDeckPanel()
+checkShareHash()
+document.getElementById('search-input').focus()
+
+// Prefetch example chips — only runs ONCE, triggered by first user interaction.
+// This avoids competing with actual searches on page load.
+const PREFETCH = ['Charizard', 'Pikachu', 'Mewtwo', 'Eevee']
+let prefetchDone = false
+function runPrefetch() {
+  if (prefetchDone) return
+  prefetchDone = true
+  // Warm memory cache from localStorage first (free, sync)
+  PREFETCH.forEach(name => {
+    const key = name.toLowerCase()
+    const cached = lsCacheGet(key)
+    if (cached) searchCache.set(key, cached)
+  })
+  // Fetch only the ones still missing, staggered so we don't compete
+  PREFETCH.forEach((name, i) => {
+    const key = name.toLowerCase()
+    if (searchCache.has(key)) return   // already cached — skip
+    setTimeout(async () => {
+      try {
+        const raw  = await fetchTimed(`https://api.tcgdex.net/v2/en/cards?name=${encodeURIComponent(name)}`)
+        const data = (Array.isArray(raw) ? raw : []).map(c => ({ ...c, _lang: 'en' }))
+        searchCache.set(key, data)
+        lsCacheSet(key, data)
+      } catch {}
+    }, i * 500)
+  })
+}
+// Trigger on first keystroke or chip click — whichever comes first
+document.getElementById('search-input').addEventListener('focus', runPrefetch, { once: true })
+document.querySelectorAll('.example-chip').forEach(el => el.addEventListener('click', runPrefetch, { once: true }))
+</script>
+</body>
+</html>
