@@ -1250,7 +1250,15 @@ const TYPE_SYMBOL = {
     `<path d="M9 3.5 L10.2 7.8 L14.5 9 L10.2 10.2 L9 14.5 L7.8 10.2 L3.5 9 L7.8 7.8Z" fill="white"/>`,
 }
 
+// Types that have a real PNG downloaded in assets/energy/
+const TYPE_HAS_IMG = new Set(['Grass','Fire','Water','Lightning','Psychic','Fighting','Darkness','Metal','Fairy','Colorless'])
+
 function _typeIcon(t, size=16) {
+  if (TYPE_HAS_IMG.has(t)) {
+    // Official Pokémon TCG energy symbols (cropped from Bulbapedia, stored locally)
+    return `<img src="assets/energy/${t}.png" width="${size}" height="${size}" alt="${t}" title="${t}" style="flex-shrink:0;display:block;border-radius:50%">`
+  }
+  // SVG fallback for Dragon and any unknown types
   const c   = TYPE_COLORS[t] ?? TYPE_COLORS.Colorless
   const sym = TYPE_SYMBOL[t] ?? TYPE_SYMBOL.Colorless
   return `<svg viewBox="0 0 18 18" width="${size}" height="${size}" xmlns="http://www.w3.org/2000/svg" style="flex-shrink:0;display:block"><circle cx="9" cy="9" r="9" fill="${c}"/>${sym}</svg>`
