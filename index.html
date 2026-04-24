@@ -338,6 +338,70 @@ body > * { position: relative; z-index: 1; }
   display: flex; align-items: center; justify-content: center;
   border-radius: 0.5rem; font-size: 1.1rem;
 }
+/* ── Filter bar ── */
+.filter-bar { margin-top: 0.55rem; display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+.filter-toggle-btn {
+  display: inline-flex; align-items: center; gap: 0.4rem;
+  padding: 0.22rem 0.7rem; border-radius: 999px;
+  border: 1px solid var(--border-mid); background: transparent;
+  font-size: 0.67rem; font-family: var(--font-mono); color: var(--text-secondary);
+  cursor: pointer; transition: all 0.15s;
+}
+.filter-toggle-btn:hover { border-color: var(--border-bright); color: var(--text-primary); }
+.filter-toggle-btn.has-active { background: var(--dark); color: #fff; border-color: var(--dark); }
+.filter-count {
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--red); color: #fff; border-radius: 999px;
+  min-width: 15px; height: 15px; font-size: 0.58rem; font-weight: 700; padding: 0 3px;
+}
+.active-filter-pills { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+.active-pill {
+  display: inline-flex; align-items: center; gap: 0.25rem;
+  padding: 0.15rem 0.35rem 0.15rem 0.5rem; border-radius: 999px;
+  background: var(--dark); color: #fff; font-size: 0.6rem; font-family: var(--font-mono);
+}
+.active-pill button { color: rgba(255,255,255,0.7); font-size: 0.65rem; line-height: 1; padding: 0 0.1rem; }
+.active-pill button:hover { color: #fff; }
+/* Filter panel slide-down */
+.filter-panel { overflow: hidden; max-height: 0; transition: max-height 0.32s cubic-bezier(0.4,0,0.2,1); }
+.filter-panel.open { max-height: 700px; }
+.filter-inner {
+  padding: 0.875rem 0 0.625rem;
+  display: grid; grid-template-columns: 1fr 1fr; gap: 0.875rem 1.5rem;
+}
+@media (max-width: 540px) { .filter-inner { grid-template-columns: 1fr; } }
+.filter-group-label {
+  font-size: 0.57rem; font-family: var(--font-mono); text-transform: uppercase;
+  letter-spacing: 0.12em; color: var(--text-secondary); margin-bottom: 0.45rem;
+  display: flex; align-items: center; gap: 0.4rem;
+}
+.filter-chips { display: flex; flex-wrap: wrap; gap: 0.3rem; align-items: center; }
+.fchip {
+  display: inline-flex; align-items: center; gap: 0.28rem;
+  padding: 0.18rem 0.55rem; border-radius: 999px; font-size: 0.67rem;
+  font-family: var(--font-mono); border: 1px solid var(--border-mid);
+  background: var(--surface-alt); color: var(--text-secondary);
+  cursor: pointer; transition: all 0.14s; white-space: nowrap;
+}
+.fchip:hover { border-color: var(--border-bright); color: var(--text-primary); }
+.fchip.active { background: var(--dark); color: #fff; border-color: var(--dark); }
+.fchip.type-chip { padding: 0.12rem 0.4rem 0.12rem 0.12rem; }
+.fchip.type-chip.active { background: var(--dark); border-color: var(--dark); color: #fff; }
+.expansion-wrap { position: relative; }
+.expansion-select {
+  width: 100%; padding: 0.3rem 1.6rem 0.3rem 0.6rem; border-radius: 0.4rem;
+  border: 1px solid var(--border-mid); background: var(--surface-alt);
+  font-size: 0.68rem; font-family: var(--font-mono); color: var(--text-primary);
+  cursor: pointer; appearance: none; -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%235E6B76'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 0.55rem center;
+  transition: border-color 0.15s;
+}
+.expansion-select:focus { outline: none; border-color: var(--red); box-shadow: 0 0 0 2px rgba(215,35,35,0.1); }
+.expansion-select.has-val { border-color: var(--dark); background-color: var(--dark); color: #fff;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23ffffff'/%3E%3C/svg%3E"); }
+.filter-panel-divider { grid-column: 1 / -1; height: 1px; background: var(--border-subtle); margin: -0.25rem 0; }
+
 .examples { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid var(--border-subtle); }
 .example-label { font-size: 0.7rem; color: var(--text-secondary); font-family: var(--font-mono); margin-right: 0.2rem; }
 .chip {
@@ -1038,6 +1102,72 @@ footer {
             autocomplete="off" autocorrect="off" spellcheck="false">
           <button class="btn-gold search-btn" id="search-btn" onclick="doSearchImmediate()">→</button>
         </div>
+        <!-- ── Filter bar ── -->
+        <div class="filter-bar">
+          <button class="filter-toggle-btn" id="filter-toggle-btn" onclick="toggleFilterPanel()">
+            <svg width="12" height="10" viewBox="0 0 12 10" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <line x1="0" y1="2" x2="12" y2="2" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+              <line x1="0" y1="8" x2="12" y2="8" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+              <circle cx="3.5" cy="2" r="1.8" fill="var(--bg,#eee)" stroke="currentColor" stroke-width="1.3"/>
+              <circle cx="8.5" cy="8" r="1.8" fill="var(--bg,#eee)" stroke="currentColor" stroke-width="1.3"/>
+            </svg>
+            Filters
+            <span class="filter-count hidden" id="filter-count">0</span>
+          </button>
+          <div class="active-filter-pills" id="active-filter-pills"></div>
+        </div>
+
+        <!-- Filter panel (hidden by default) -->
+        <div class="filter-panel" id="filter-panel">
+          <div class="filter-inner">
+
+            <!-- Game -->
+            <div>
+              <div class="filter-group-label">Game</div>
+              <div class="filter-chips">
+                <button class="fchip active" data-filter="game" data-val="all"    onclick="setGameFilter('all')">All</button>
+                <button class="fchip"        data-filter="game" data-val="tcg"    onclick="setGameFilter('tcg')">TCG</button>
+                <button class="fchip"        data-filter="game" data-val="pocket" onclick="setGameFilter('pocket')">Pocket</button>
+              </div>
+            </div>
+
+            <!-- Card Type -->
+            <div>
+              <div class="filter-group-label">Card Type</div>
+              <div class="filter-chips">
+                <button class="fchip active" data-filter="cat" data-val="all"     onclick="setCategoryFilter('all')">All</button>
+                <button class="fchip"        data-filter="cat" data-val="Pokemon" onclick="setCategoryFilter('Pokemon')">Pokémon</button>
+                <button class="fchip"        data-filter="cat" data-val="Trainer" onclick="setCategoryFilter('Trainer')">Trainer</button>
+                <button class="fchip"        data-filter="cat" data-val="Energy"  onclick="setCategoryFilter('Energy')">Energy</button>
+              </div>
+            </div>
+
+            <div class="filter-panel-divider"></div>
+
+            <!-- Energy Type -->
+            <div style="grid-column:1/-1">
+              <div class="filter-group-label">Energy Type <span style="opacity:0.55;font-size:0.52rem">(multi-select)</span></div>
+              <div class="filter-chips" id="filter-type-chips"></div>
+            </div>
+
+            <div class="filter-panel-divider"></div>
+
+            <!-- Expansion -->
+            <div style="grid-column:1/-1">
+              <div class="filter-group-label">
+                Expansion
+                <span style="opacity:0.5;font-size:0.52rem;font-weight:400">populated after search</span>
+              </div>
+              <div class="expansion-wrap">
+                <select class="expansion-select" id="expansion-select" onchange="setExpansionFilter(this.value)">
+                  <option value="all">All Expansions</option>
+                </select>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
         <div class="examples">
           <span class="example-label">Try:</span>
           <button class="chip" onclick="quickSearch('Charizard')">Charizard <span class="jp">リザードン</span></button>
@@ -1384,7 +1514,7 @@ document.getElementById('search-input').addEventListener('input', () => {
   if (!q) { showEmpty(); return }
 
   // Cache hit → render IMMEDIATELY, zero delay, no skeleton flash
-  const hit = getCachedResult(q)
+  const hit = getCachedResult(q.toLowerCase() + filterCacheKey())
   if (hit) { renderSearchResult(q, hit); return }
 
   // No cache → show skeleton right now so the UI feels responsive,
@@ -1409,9 +1539,9 @@ function quickSearch(name) {
   doSearch(name)
 }
 
-/** Return cached results (memory first, then localStorage) or null */
-function getCachedResult(query) {
-  const key = query.toLowerCase().trim()
+/** Return cached results (memory first, then localStorage) or null.
+ *  `key` is the composite key (query + filter suffix) built in doSearch. */
+function getCachedResult(key) {
   if (searchCache.has(key)) return searchCache.get(key)
   const persisted = lsCacheGet(key)
   if (persisted) { searchCache.set(key, persisted); return persisted }
@@ -1422,13 +1552,164 @@ function getCachedResult(query) {
 function renderSearchResult(query, merged) {
   clearError()
   hide('empty-state'); hide('no-results'); hide('results-section'); hide('skeleton-section')
-  if (merged.length === 0) show('no-results')
-  else renderGrid(merged)
+  lastSearchResults = merged            // save for client-side re-filtering
+  updateExpansionDropdown(merged)       // populate expansion <select>
+  const visible = applyClientFilters(merged)
+  if (visible.length === 0) show('no-results')
+  else renderGrid(visible)
 }
 
+// ═══════════════════════════════════════════════════
+// FILTER STATE & LOGIC
+// ═══════════════════════════════════════════════════
+const filters = {
+  game:      'all',      // 'all' | 'tcg' | 'pocket'
+  types:     new Set(),  // Set of energy type strings
+  category:  'all',      // 'all' | 'Pokemon' | 'Trainer' | 'Energy'
+  expansion: 'all',      // 'all' | set.id string
+}
+let filterPanelOpen  = false
+let lastSearchResults = []  // full unfiltered results from last API call
+
+// Detect TCG Pocket cards — their set IDs start with A (A1, A1a, A2…) or PROMO-A
+function isPocketCard(c) { return /^A\d|^PROMO-A/i.test(c.set?.id || '') }
+
+// Build a cache-key suffix that represents active API-level filters (type + category)
+function filterCacheKey() {
+  const t = [...filters.types].sort().join(',')
+  const c = filters.category
+  return (t || c !== 'all') ? `|t:${t}|c:${c}` : ''
+}
+
+// Apply client-side filters (game + expansion) to an array of cards
+function applyClientFilters(cards) {
+  return cards.filter(c => {
+    if (filters.game !== 'all') {
+      const pocket = isPocketCard(c)
+      if (filters.game === 'pocket' && !pocket) return false
+      if (filters.game === 'tcg'    &&  pocket) return false
+    }
+    if (filters.expansion !== 'all' && (c.set?.id || '') !== filters.expansion) return false
+    return true
+  })
+}
+
+// Rebuild the expansion <select> from the full result set
+function updateExpansionDropdown(cards) {
+  const sel = document.getElementById('expansion-select')
+  if (!sel) return
+  const sets = new Map()
+  cards.forEach(c => { if (c.set?.id && c.set?.name) sets.set(c.set.id, c.set.name) })
+  const prev = filters.expansion
+  sel.innerHTML = '<option value="all">All Expansions</option>' +
+    [...sets.entries()]
+      .sort((a, b) => a[1].localeCompare(b[1]))
+      .map(([id, name]) => `<option value="${escHtml(id)}"${id===prev?' selected':''}>${escHtml(name)}</option>`)
+      .join('')
+  sel.classList.toggle('has-val', prev !== 'all')
+}
+
+// Re-render results using current client-side filters (no new fetch needed)
+function reapplyClientFilters() {
+  if (!lastSearchResults.length) return
+  hide('no-results'); hide('results-section')
+  const visible = applyClientFilters(lastSearchResults)
+  if (visible.length === 0) show('no-results')
+  else renderGrid(visible)
+}
+
+// Count all active filters for the badge
+function countActiveFilters() {
+  return (filters.game !== 'all' ? 1 : 0) +
+         filters.types.size +
+         (filters.category !== 'all' ? 1 : 0) +
+         (filters.expansion !== 'all' ? 1 : 0)
+}
+
+// Rebuild the active-filter summary pills
+function updateFilterUI() {
+  const n     = countActiveFilters()
+  const badge = document.getElementById('filter-count')
+  const btn   = document.getElementById('filter-toggle-btn')
+  const pills = document.getElementById('active-filter-pills')
+  badge.textContent = n
+  badge.classList.toggle('hidden', n === 0)
+  btn.classList.toggle('has-active', n > 0)
+
+  // Summary pills
+  const parts = []
+  if (filters.game !== 'all') parts.push({ label: filters.game === 'pocket' ? 'Pocket' : 'TCG', clear: () => setGameFilter('all') })
+  if (filters.category !== 'all') parts.push({ label: filters.category, clear: () => setCategoryFilter('all') })
+  filters.types.forEach(t => parts.push({ label: t, clear: () => toggleTypeFilter(t) }))
+  if (filters.expansion !== 'all') {
+    const sel = document.getElementById('expansion-select')
+    const name = sel?.options[sel.selectedIndex]?.text || filters.expansion
+    parts.push({ label: name, clear: () => setExpansionFilter('all') })
+  }
+  pills.innerHTML = parts.map(p =>
+    `<span class="active-pill">${escHtml(p.label)}<button onclick="(${p.clear.toString()})()">✕</button></span>`
+  ).join('')
+}
+
+// ── Filter setters ──────────────────────────────────
+function toggleFilterPanel() {
+  filterPanelOpen = !filterPanelOpen
+  document.getElementById('filter-panel').classList.toggle('open', filterPanelOpen)
+}
+
+function setGameFilter(val) {
+  filters.game = val
+  document.querySelectorAll('[data-filter="game"]').forEach(el =>
+    el.classList.toggle('active', el.dataset.val === val))
+  updateFilterUI(); reapplyClientFilters()
+}
+
+function setCategoryFilter(val) {
+  filters.category = val
+  document.querySelectorAll('[data-filter="cat"]').forEach(el =>
+    el.classList.toggle('active', el.dataset.val === val))
+  updateFilterUI()
+  // Category requires a new API fetch since the field isn't in list results
+  const q = document.getElementById('search-input').value.trim()
+  if (q) { clearTimeout(debounceTimer); doSearch(q) }
+}
+
+function toggleTypeFilter(type) {
+  if (filters.types.has(type)) filters.types.delete(type)
+  else filters.types.add(type)
+  document.querySelectorAll('[data-filter="type"]').forEach(el =>
+    el.classList.toggle('active', filters.types.has(el.dataset.val)))
+  updateFilterUI()
+  // Type requires a new API fetch
+  const q = document.getElementById('search-input').value.trim()
+  if (q) { clearTimeout(debounceTimer); doSearch(q) }
+}
+
+function setExpansionFilter(val) {
+  filters.expansion = val
+  const sel = document.getElementById('expansion-select')
+  if (sel) sel.classList.toggle('has-val', val !== 'all')
+  updateFilterUI(); reapplyClientFilters()
+}
+
+// Build the energy type chips (called once on load)
+function initTypeFilterChips() {
+  const TYPES = ['Grass','Fire','Water','Lightning','Psychic','Fighting','Darkness','Metal','Dragon','Fairy','Colorless']
+  const container = document.getElementById('filter-type-chips')
+  if (!container) return
+  container.innerHTML = TYPES.map(t =>
+    `<button class="fchip type-chip" data-filter="type" data-val="${t}" onclick="toggleTypeFilter('${t}')" title="${t}">
+      ${_typeIcon(t, 16)}<span style="font-size:0.62rem">${t}</span>
+    </button>`
+  ).join('')
+}
+
+// ── Hook into doSearch / renderSearchResult ──────────
 async function doSearch(query) {
-  const key   = query.toLowerCase().trim()
-  const hasJP = isJapaneseQuery(query)
+  const baseKey = query.toLowerCase().trim()
+  const fSuffix = filterCacheKey()           // '' when no API-level filters active
+  const key     = baseKey + fSuffix
+  const hasJP   = isJapaneseQuery(query)
 
   // Mark this as the active search — any older concurrent call will bail when it resolves
   searchInFlight = key
@@ -1437,7 +1718,7 @@ async function doSearch(query) {
   hide('empty-state'); hide('no-results'); hide('results-section'); hide('skeleton-section')
 
   // Check cache — if hit, render instantly without showing skeleton
-  const cached = getCachedResult(query)
+  const cached = getCachedResult(key)
   if (cached) { renderSearchResult(query, cached); return }
 
   // No cache → show skeleton while fetching
@@ -1445,8 +1726,15 @@ async function doSearch(query) {
 
   try {
     const BASE = 'https://api.tcgdex.net/v2'
-    const enUrl = `${BASE}/en/cards?name=${encodeURIComponent(query)}`
-    const jaUrl = `${BASE}/ja/cards?name=${encodeURIComponent(query)}`
+
+    // Build filter query params (type + category filters go to the API)
+    const filterParams = new URLSearchParams()
+    filterParams.set('name', query)
+    if (filters.category !== 'all') filterParams.set('category', filters.category)
+    filters.types.forEach(t => filterParams.append('types[]', t))
+
+    const enUrl = `${BASE}/en/cards?${filterParams}`
+    const jaUrl = `${BASE}/ja/cards?name=${encodeURIComponent(query)}`  // JA API: name only
 
     // JA API only understands Japanese card names — skip for English queries
     let enCards, jaCards
@@ -2920,6 +3208,7 @@ document.getElementById('mode-scan').style.display = 'none'
 syncDeck()
 renderDeckPanel()
 checkShareHash()
+initTypeFilterChips()   // build energy type filter chips using real SVG icons
 document.getElementById('search-input').focus()
 
 // Prefetch example chips — only runs ONCE, triggered by first user interaction.
