@@ -1142,6 +1142,12 @@ footer {
               </div>
             </div>
 
+            <!-- Sub-filter (contextual — appears only when a card type is selected) -->
+            <div id="subfilter-row" class="hidden" style="grid-column:1/-1">
+              <div class="filter-group-label" id="subfilter-label">Sub-type</div>
+              <div class="filter-chips" id="subfilter-chips"></div>
+            </div>
+
             <div class="filter-panel-divider"></div>
 
             <!-- Energy Type -->
@@ -1566,22 +1572,29 @@ const filters = {
   game:      'all',      // 'all' | 'tcg' | 'pocket'
   types:     new Set(),  // Set of energy type strings
   category:  'all',      // 'all' | 'Pokemon' | 'Trainer' | 'Energy'
+  subfilter: 'all',      // context-dependent sub-type (Supporter/Item/… or rulebox/normal/…)
   expansion: 'all',      // 'all' | set.id string
 }
-let filterPanelOpen  = false
+let filterPanelOpen   = false
 let lastSearchResults = []  // full unfiltered results from last API call
 
 // Detect TCG Pocket cards — their set IDs start with A (A1, A1a, A2…) or PROMO-A
 function isPocketCard(c) { return /^A\d|^PROMO-A/i.test(c.set?.id || '') }
 
-// Build a cache-key suffix that represents active API-level filters (type + category)
+// Rule Box Pokémon detection by name suffix (client-side)
+const RULE_BOX_RE = /\b(ex|EX|GX|V|VMAX|VSTAR|V-UNION|LEGEND|e\+)\s*$/
+function isRuleBoxCard(name) { return RULE_BOX_RE.test((name || '').trim()) }
+
+// Build a cache-key suffix for API-level filters (type + category + subfilter)
 function filterCacheKey() {
   const t = [...filters.types].sort().join(',')
   const c = filters.category
-  return (t || c !== 'all') ? `|t:${t}|c:${c}` : ''
+  const s = filters.subfilter
+  const hasApi = t || c !== 'all' || s !== 'all'
+  return hasApi ? `|t:${t}|c:${c}|s:${s}` : ''
 }
 
-// Apply client-side filters (game + expansion) to an array of cards
+// Apply client-side-only filters (game + expansion + pokemon subfilter) to card array
 function applyClientFilters(cards) {
   return cards.filter(c => {
     if (filters.game !== 'all') {
@@ -1590,6 +1603,12 @@ function applyClientFilters(cards) {
       if (filters.game === 'tcg'    &&  pocket) return false
     }
     if (filters.expansion !== 'all' && (c.set?.id || '') !== filters.expansion) return false
+    // Pokémon Rule Box sub-filter is client-side (name-based)
+    if (filters.category === 'Pokemon' && filters.subfilter !== 'all') {
+      const rb = isRuleBoxCard(c.name)
+      if (filters.subfilter === 'rulebox' && !rb) return false
+      if (filters.subfilter === 'normal'  &&  rb) return false
+    }
     return true
   })
 }
@@ -1609,9 +1628,13 @@ function updateExpansionDropdown(cards) {
   sel.classList.toggle('has-val', prev !== 'all')
 }
 
-// Re-render results using current client-side filters (no new fetch needed)
+// Re-render with client-side filters; trigger API fetch if no results yet and query exists
 function reapplyClientFilters() {
-  if (!lastSearchResults.length) return
+  const q = document.getElementById('search-input').value.trim()
+  if (!lastSearchResults.length) {
+    if (q) { clearTimeout(debounceTimer); doSearch(q) }
+    return
+  }
   hide('no-results'); hide('results-section')
   const visible = applyClientFilters(lastSearchResults)
   if (visible.length === 0) show('no-results')
@@ -1623,10 +1646,12 @@ function countActiveFilters() {
   return (filters.game !== 'all' ? 1 : 0) +
          filters.types.size +
          (filters.category !== 'all' ? 1 : 0) +
+         (filters.subfilter !== 'all' ? 1 : 0) +
          (filters.expansion !== 'all' ? 1 : 0)
 }
 
 // Rebuild the active-filter summary pills
+// FIX: use explicit onclick strings instead of closure.toString() so X buttons work
 function updateFilterUI() {
   const n     = countActiveFilters()
   const badge = document.getElementById('filter-count')
@@ -1636,19 +1661,61 @@ function updateFilterUI() {
   badge.classList.toggle('hidden', n === 0)
   btn.classList.toggle('has-active', n > 0)
 
-  // Summary pills
   const parts = []
-  if (filters.game !== 'all') parts.push({ label: filters.game === 'pocket' ? 'Pocket' : 'TCG', clear: () => setGameFilter('all') })
-  if (filters.category !== 'all') parts.push({ label: filters.category, clear: () => setCategoryFilter('all') })
-  filters.types.forEach(t => parts.push({ label: t, clear: () => toggleTypeFilter(t) }))
+  if (filters.game !== 'all')
+    parts.push({ label: filters.game === 'pocket' ? 'Pocket' : 'TCG', clear: `setGameFilter('all')` })
+  if (filters.category !== 'all')
+    parts.push({ label: filters.category, clear: `setCategoryFilter('all')` })
+  if (filters.subfilter !== 'all')
+    parts.push({ label: filters.subfilter, clear: `setSubfilter('all')` })
+  filters.types.forEach(t =>
+    parts.push({ label: t, clear: `toggleTypeFilter('${t}')` }))
   if (filters.expansion !== 'all') {
-    const sel = document.getElementById('expansion-select')
+    const sel  = document.getElementById('expansion-select')
     const name = sel?.options[sel.selectedIndex]?.text || filters.expansion
-    parts.push({ label: name, clear: () => setExpansionFilter('all') })
+    parts.push({ label: name, clear: `setExpansionFilter('all')` })
   }
   pills.innerHTML = parts.map(p =>
-    `<span class="active-pill">${escHtml(p.label)}<button onclick="(${p.clear.toString()})()">✕</button></span>`
+    `<span class="active-pill">${escHtml(p.label)}<button onclick="${escAtt(p.clear)}">✕</button></span>`
   ).join('')
+}
+
+// ── Sub-filter definitions per card type ─────────────
+function getSubfilterOptions(category) {
+  if (category === 'Pokemon') return [
+    { val: 'all',     label: 'All' },
+    { val: 'normal',  label: 'Normal' },
+    { val: 'rulebox', label: '⭐ Rule Box' },
+  ]
+  if (category === 'Trainer') return [
+    { val: 'all',       label: 'All' },
+    { val: 'Supporter', label: 'Supporter' },
+    { val: 'Item',      label: 'Item' },
+    { val: 'Tool',      label: 'Tool' },
+    { val: 'Stadium',   label: 'Stadium' },
+  ]
+  if (category === 'Energy') return [
+    { val: 'all',            label: 'All' },
+    { val: 'Basic Energy',   label: 'Basic' },
+    { val: 'Special Energy', label: 'Special' },
+  ]
+  return null
+}
+
+function updateSubfilterRow() {
+  const row   = document.getElementById('subfilter-row')
+  const chips = document.getElementById('subfilter-chips')
+  const lbl   = document.getElementById('subfilter-label')
+  const opts  = getSubfilterOptions(filters.category)
+  if (!opts) { row?.classList.add('hidden'); return }
+
+  const labelMap = { Pokemon: 'Pokémon Sub-type', Trainer: 'Trainer Type', Energy: 'Energy Type' }
+  lbl.textContent = labelMap[filters.category] || 'Sub-type'
+  chips.innerHTML = opts.map(o =>
+    `<button class="fchip${filters.subfilter===o.val?' active':''}"
+       data-filter="sub" data-val="${o.val}" onclick="setSubfilter('${o.val}')">${o.label}</button>`
+  ).join('')
+  row.classList.remove('hidden')
 }
 
 // ── Filter setters ──────────────────────────────────
@@ -1666,12 +1733,29 @@ function setGameFilter(val) {
 
 function setCategoryFilter(val) {
   filters.category = val
+  filters.subfilter = 'all'   // reset sub-filter when parent category changes
   document.querySelectorAll('[data-filter="cat"]').forEach(el =>
     el.classList.toggle('active', el.dataset.val === val))
+  updateSubfilterRow()
   updateFilterUI()
-  // Category requires a new API fetch since the field isn't in list results
   const q = document.getElementById('search-input').value.trim()
   if (q) { clearTimeout(debounceTimer); doSearch(q) }
+  else reapplyClientFilters()
+}
+
+function setSubfilter(val) {
+  filters.subfilter = val
+  document.querySelectorAll('[data-filter="sub"]').forEach(el =>
+    el.classList.toggle('active', el.dataset.val === val))
+  updateFilterUI()
+  // Pokémon Rule Box is client-side; Trainer & Energy subtypes need API fetch
+  if (filters.category === 'Pokemon') {
+    reapplyClientFilters()
+  } else {
+    const q = document.getElementById('search-input').value.trim()
+    if (q) { clearTimeout(debounceTimer); doSearch(q) }
+    else reapplyClientFilters()
+  }
 }
 
 function toggleTypeFilter(type) {
@@ -1680,15 +1764,15 @@ function toggleTypeFilter(type) {
   document.querySelectorAll('[data-filter="type"]').forEach(el =>
     el.classList.toggle('active', filters.types.has(el.dataset.val)))
   updateFilterUI()
-  // Type requires a new API fetch
   const q = document.getElementById('search-input').value.trim()
   if (q) { clearTimeout(debounceTimer); doSearch(q) }
+  else reapplyClientFilters()
 }
 
 function setExpansionFilter(val) {
   filters.expansion = val
   const sel = document.getElementById('expansion-select')
-  if (sel) sel.classList.toggle('has-val', val !== 'all')
+  if (sel) { sel.value = val; sel.classList.toggle('has-val', val !== 'all') }
   updateFilterUI(); reapplyClientFilters()
 }
 
@@ -1732,6 +1816,11 @@ async function doSearch(query) {
     filterParams.set('name', query)
     if (filters.category !== 'all') filterParams.set('category', filters.category)
     filters.types.forEach(t => filterParams.append('types[]', t))
+    // Trainer sub-types (Supporter/Item/Tool/Stadium) and Energy sub-types via API suffix param
+    // Pokémon Rule Box / Normal is handled client-side in applyClientFilters (name-based)
+    if (filters.subfilter !== 'all' && filters.category !== 'Pokemon') {
+      filterParams.set('suffix', filters.subfilter)
+    }
 
     const enUrl = `${BASE}/en/cards?${filterParams}`
     const jaUrl = `${BASE}/ja/cards?name=${encodeURIComponent(query)}`  // JA API: name only
