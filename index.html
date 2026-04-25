@@ -1548,9 +1548,14 @@ function quickSearch(name) {
 }
 
 /** Return cached results (memory first, then localStorage) or null.
- *  `key` is the composite key (query + filter suffix) built in doSearch. */
+ *  `key` is the composite key (query + filter suffix) built in doSearch.
+ *  Always rejects empty arrays — they are poisoned entries from failed API calls. */
 function getCachedResult(key) {
-  if (searchCache.has(key)) return searchCache.get(key)
+  if (searchCache.has(key)) {
+    const v = searchCache.get(key)
+    if (!Array.isArray(v) || v.length === 0) { searchCache.delete(key); return null }
+    return v
+  }
   const persisted = lsCacheGet(key)
   if (persisted) { searchCache.set(key, persisted); return persisted }
   return null
@@ -1633,38 +1638,45 @@ function applyClientFilters(cards) {
 // Uses cardDetailCache + localStorage so repeated calls are essentially free.
 async function applySubtypeFilterAsync(cards, targetSubfilter) {
   const BASE = 'https://api.tcgdex.net/v2'
-  const results = await Promise.all(cards.map(async (card) => {
-    const id = card.id
+  // Process in batches of 5 to avoid flooding TCGdex with parallel requests
+  const BATCH = 5
+  const all = []
+  for (let i = 0; i < cards.length; i += BATCH) {
+    const chunk = cards.slice(i, i + BATCH)
+    const batch = await Promise.all(chunk.map(async (card) => {
+      const id = card.id
 
-    // 1. Memory cache
-    if (cardDetailCache.has(id)) {
-      const cached = cardDetailCache.get(id)
-      const d = cached.en || cached.ja
-      return d?.suffix === targetSubfilter ? card : null
-    }
+      // 1. Memory cache
+      if (cardDetailCache.has(id)) {
+        const cached = cardDetailCache.get(id)
+        const d = cached.en || cached.ja
+        return d?.suffix === targetSubfilter ? card : null
+      }
 
-    // 2. localStorage cache
-    const persisted = lsDetailGet(id)
-    if (persisted) {
-      cardDetailCache.set(id, persisted)
-      const d = persisted.en || persisted.ja
-      return d?.suffix === targetSubfilter ? card : null
-    }
+      // 2. localStorage cache
+      const persisted = lsDetailGet(id)
+      if (persisted) {
+        cardDetailCache.set(id, persisted)
+        const d = persisted.en || persisted.ja
+        return d?.suffix === targetSubfilter ? card : null
+      }
 
-    // 3. Fetch from API (lightweight — only for uncached cards)
-    try {
-      const d = await fetchTimed(`${BASE}/en/cards/${id}`)
-      // fetchTimed returns [] on error; a valid card detail is an object
-      if (!d || Array.isArray(d)) return null
-      const detail = { en: d, ja: null }
-      cardDetailCache.set(id, detail)
-      lsDetailSet(id, detail)
-      return d?.suffix === targetSubfilter ? card : null
-    } catch {
-      return null
-    }
-  }))
-  return results.filter(Boolean)
+      // 3. Fetch from API (only for uncached cards)
+      try {
+        const d = await fetchTimed(`${BASE}/en/cards/${id}`)
+        // fetchTimed returns [] on error; a valid card detail is an object
+        if (!d || Array.isArray(d)) return null
+        const detail = { en: d, ja: null }
+        cardDetailCache.set(id, detail)
+        lsDetailSet(id, detail)
+        return d?.suffix === targetSubfilter ? card : null
+      } catch {
+        return null
+      }
+    }))
+    all.push(...batch)
+  }
+  return all.filter(Boolean)
 }
 
 // Rebuild the expansion <select> from the full result set
@@ -3387,8 +3399,11 @@ function runPrefetch() {
       try {
         const raw  = await fetchTimed(`https://api.tcgdex.net/v2/en/cards?name=${encodeURIComponent(name)}`)
         const data = (Array.isArray(raw) ? raw : []).map(c => ({ ...c, _lang: 'en' }))
-        searchCache.set(key, data)
-        lsCacheSet(key, data)
+        // Never cache empty results — avoids poisoning searchCache on API hiccups
+        if (data.length > 0) {
+          searchCache.set(key, data)
+          lsCacheSet(key, data)
+        }
       } catch {}
     }, i * 500)
   })
