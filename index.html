@@ -403,6 +403,8 @@ body > * { position: relative; z-index: 1; }
 .filter-panel-divider { grid-column: 1 / -1; height: 1px; background: var(--border-subtle); margin: -0.25rem 0; }
 
 .examples { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid var(--border-subtle); }
+/* Remove double-line when filter panel is open directly above examples */
+.filter-panel.open + .examples { border-top: none; padding-top: 0.25rem; }
 .example-label { font-size: 0.7rem; color: var(--text-secondary); font-family: var(--font-mono); margin-right: 0.2rem; }
 .chip {
   display: flex; align-items: center; gap: 0.3rem; padding: 0.25rem 0.7rem;
@@ -1555,12 +1557,23 @@ function getCachedResult(key) {
 }
 
 /** Render results (or no-results) without touching the skeleton */
-function renderSearchResult(query, merged) {
+async function renderSearchResult(query, merged) {
   clearError()
   hide('empty-state'); hide('no-results'); hide('results-section'); hide('skeleton-section')
   lastSearchResults = merged            // save for client-side re-filtering
   updateExpansionDropdown(merged)       // populate expansion <select>
-  const visible = applyClientFilters(merged)
+  let visible = applyClientFilters(merged)
+
+  // Trainer & Energy subtypes need per-card detail to read the `suffix` field
+  const needsDetailFilter = filters.subfilter !== 'all'
+    && filters.category !== 'all'
+    && filters.category !== 'Pokemon'
+  if (needsDetailFilter) {
+    showSkeleton(true)
+    visible = await applySubtypeFilterAsync(visible, filters.subfilter)
+    showSkeleton(false)
+  }
+
   if (visible.length === 0) show('no-results')
   else renderGrid(visible)
 }
@@ -1585,13 +1598,13 @@ function isPocketCard(c) { return /^A\d|^PROMO-A/i.test(c.set?.id || '') }
 const RULE_BOX_RE = /\b(ex|EX|GX|V|VMAX|VSTAR|V-UNION|LEGEND|e\+)\s*$/
 function isRuleBoxCard(name) { return RULE_BOX_RE.test((name || '').trim()) }
 
-// Build a cache-key suffix for API-level filters (type + category + subfilter)
+// Build a cache-key suffix for API-level filters (type + category only).
+// Subfilter for Trainer/Energy is post-fetch (detail hydration) so NOT in the key.
 function filterCacheKey() {
   const t = [...filters.types].sort().join(',')
   const c = filters.category
-  const s = filters.subfilter
-  const hasApi = t || c !== 'all' || s !== 'all'
-  return hasApi ? `|t:${t}|c:${c}|s:${s}` : ''
+  const hasApi = t || c !== 'all'
+  return hasApi ? `|t:${t}|c:${c}` : ''
 }
 
 // Apply client-side-only filters (game + expansion + pokemon subfilter) to card array
@@ -1613,6 +1626,47 @@ function applyClientFilters(cards) {
   })
 }
 
+// Async sub-type filter for Trainer & Energy cards.
+// TCGdex list API doesn't include the `suffix` field — we must fetch each card's full
+// EN detail to read it (e.g. "Supporter", "Item", "Tool", "Stadium",
+// "Basic Energy", "Special Energy").
+// Uses cardDetailCache + localStorage so repeated calls are essentially free.
+async function applySubtypeFilterAsync(cards, targetSubfilter) {
+  const BASE = 'https://api.tcgdex.net/v2'
+  const results = await Promise.all(cards.map(async (card) => {
+    const id = card.id
+
+    // 1. Memory cache
+    if (cardDetailCache.has(id)) {
+      const cached = cardDetailCache.get(id)
+      const d = cached.en || cached.ja
+      return d?.suffix === targetSubfilter ? card : null
+    }
+
+    // 2. localStorage cache
+    const persisted = lsDetailGet(id)
+    if (persisted) {
+      cardDetailCache.set(id, persisted)
+      const d = persisted.en || persisted.ja
+      return d?.suffix === targetSubfilter ? card : null
+    }
+
+    // 3. Fetch from API (lightweight — only for uncached cards)
+    try {
+      const d = await fetchTimed(`${BASE}/en/cards/${id}`)
+      // fetchTimed returns [] on error; a valid card detail is an object
+      if (!d || Array.isArray(d)) return null
+      const detail = { en: d, ja: null }
+      cardDetailCache.set(id, detail)
+      lsDetailSet(id, detail)
+      return d?.suffix === targetSubfilter ? card : null
+    } catch {
+      return null
+    }
+  }))
+  return results.filter(Boolean)
+}
+
 // Rebuild the expansion <select> from the full result set
 function updateExpansionDropdown(cards) {
   const sel = document.getElementById('expansion-select')
@@ -1629,14 +1683,25 @@ function updateExpansionDropdown(cards) {
 }
 
 // Re-render with client-side filters; trigger API fetch if no results yet and query exists
-function reapplyClientFilters() {
+async function reapplyClientFilters() {
   const q = document.getElementById('search-input').value.trim()
   if (!lastSearchResults.length) {
     if (q) { clearTimeout(debounceTimer); doSearch(q) }
     return
   }
   hide('no-results'); hide('results-section')
-  const visible = applyClientFilters(lastSearchResults)
+  let visible = applyClientFilters(lastSearchResults)
+
+  // Trainer & Energy subtypes require per-card detail fetch for `suffix` field
+  const needsDetailFilter = filters.subfilter !== 'all'
+    && filters.category !== 'all'
+    && filters.category !== 'Pokemon'
+  if (needsDetailFilter) {
+    showSkeleton(true)
+    visible = await applySubtypeFilterAsync(visible, filters.subfilter)
+    showSkeleton(false)
+  }
+
   if (visible.length === 0) show('no-results')
   else renderGrid(visible)
 }
@@ -1748,14 +1813,10 @@ function setSubfilter(val) {
   document.querySelectorAll('[data-filter="sub"]').forEach(el =>
     el.classList.toggle('active', el.dataset.val === val))
   updateFilterUI()
-  // Pokémon Rule Box is client-side; Trainer & Energy subtypes need API fetch
-  if (filters.category === 'Pokemon') {
-    reapplyClientFilters()
-  } else {
-    const q = document.getElementById('search-input').value.trim()
-    if (q) { clearTimeout(debounceTimer); doSearch(q) }
-    else reapplyClientFilters()
-  }
+  // All subtypes are now client-side:
+  // Pokémon Rule Box → name regex in applyClientFilters
+  // Trainer/Energy   → per-card detail fetch in applySubtypeFilterAsync (inside reapplyClientFilters)
+  reapplyClientFilters()
 }
 
 function toggleTypeFilter(type) {
@@ -1816,11 +1877,9 @@ async function doSearch(query) {
     filterParams.set('name', query)
     if (filters.category !== 'all') filterParams.set('category', filters.category)
     filters.types.forEach(t => filterParams.append('types[]', t))
-    // Trainer sub-types (Supporter/Item/Tool/Stadium) and Energy sub-types via API suffix param
-    // Pokémon Rule Box / Normal is handled client-side in applyClientFilters (name-based)
-    if (filters.subfilter !== 'all' && filters.category !== 'Pokemon') {
-      filterParams.set('suffix', filters.subfilter)
-    }
+    // NOTE: subfilter (Supporter/Item/Tool/Stadium/Basic/Special) is NOT sent to the API.
+    // TCGdex list endpoint does not expose the `suffix` field — it is fetched per-card in
+    // applySubtypeFilterAsync() after we receive the list results.
 
     const enUrl = `${BASE}/en/cards?${filterParams}`
     const jaUrl = `${BASE}/ja/cards?name=${encodeURIComponent(query)}`  // JA API: name only
