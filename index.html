@@ -1569,10 +1569,11 @@ async function renderSearchResult(query, merged) {
   updateExpansionDropdown(merged)       // populate expansion <select>
   let visible = applyClientFilters(merged)
 
-  // Trainer & Energy subtypes need per-card detail to read the `suffix` field
+  // Only Trainer subtypes need per-card detail fetch (suffix field).
+  // Energy Basic/Special is handled client-side via name matching (instant).
+  // Pokémon Rule Box is also client-side (name regex).
   const needsDetailFilter = filters.subfilter !== 'all'
-    && filters.category !== 'all'
-    && filters.category !== 'Pokemon'
+    && filters.category === 'Trainer'
   if (needsDetailFilter) {
     showSkeleton(true)
     visible = await applySubtypeFilterAsync(visible, filters.subfilter)
@@ -1603,6 +1604,16 @@ function isPocketCard(c) { return /^A\d|^PROMO-A/i.test(c.set?.id || '') }
 const RULE_BOX_RE = /\b(ex|EX|GX|V|VMAX|VSTAR|V-UNION|LEGEND|e\+)\s*$/
 function isRuleBoxCard(name) { return RULE_BOX_RE.test((name || '').trim()) }
 
+// Basic Energy detection — client-side name match, no API call needed.
+// Basic Energy cards are always named exactly "[Type] Energy" in the TCG.
+// Everything else in the Energy category is Special Energy.
+const BASIC_ENERGY_NAMES = new Set([
+  'Grass Energy','Fire Energy','Water Energy','Lightning Energy',
+  'Psychic Energy','Fighting Energy','Darkness Energy','Metal Energy',
+  'Dragon Energy','Fairy Energy','Colorless Energy',
+])
+function isBasicEnergyCard(name) { return BASIC_ENERGY_NAMES.has((name || '').trim()) }
+
 // Build a cache-key suffix for API-level filters (type + category only).
 // Subfilter for Trainer/Energy is post-fetch (detail hydration) so NOT in the key.
 function filterCacheKey() {
@@ -1621,11 +1632,18 @@ function applyClientFilters(cards) {
       if (filters.game === 'tcg'    &&  pocket) return false
     }
     if (filters.expansion !== 'all' && (c.set?.id || '') !== filters.expansion) return false
-    // Pokémon Rule Box sub-filter is client-side (name-based)
+    // Pokémon Rule Box sub-filter — client-side name-based detection
     if (filters.category === 'Pokemon' && filters.subfilter !== 'all') {
       const rb = isRuleBoxCard(c.name)
       if (filters.subfilter === 'rulebox' && !rb) return false
       if (filters.subfilter === 'normal'  &&  rb) return false
+    }
+    // Energy Basic/Special sub-filter — client-side name-based detection (instant, no API call)
+    // Basic Energy = exactly "[Type] Energy"; everything else is Special Energy.
+    if (filters.category === 'Energy' && filters.subfilter !== 'all') {
+      const basic = isBasicEnergyCard(c.name)
+      if (filters.subfilter.toLowerCase() === 'basic energy'   && !basic) return false
+      if (filters.subfilter.toLowerCase() === 'special energy' &&  basic) return false
     }
     return true
   })
