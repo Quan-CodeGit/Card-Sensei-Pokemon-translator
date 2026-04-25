@@ -1638,6 +1638,16 @@ function applyClientFilters(cards) {
 // Uses cardDetailCache + localStorage so repeated calls are essentially free.
 async function applySubtypeFilterAsync(cards, targetSubfilter) {
   const BASE = 'https://api.tcgdex.net/v2'
+  // Normalise target once — TCGdex may return any case ("Stadium", "stadium", "STADIUM")
+  // and may use either `suffix` or `trainerType` as the field name.
+  const targetNorm = targetSubfilter.toLowerCase()
+
+  /** Extract the subtype string from a card-detail object, normalised to lowercase */
+  function getSubtype(d) {
+    if (!d) return ''
+    return (d.suffix || d.trainerType || '').toLowerCase()
+  }
+
   // Process in batches of 5 to avoid flooding TCGdex with parallel requests
   const BATCH = 5
   const all = []
@@ -1650,7 +1660,7 @@ async function applySubtypeFilterAsync(cards, targetSubfilter) {
       if (cardDetailCache.has(id)) {
         const cached = cardDetailCache.get(id)
         const d = cached.en || cached.ja
-        return d?.suffix === targetSubfilter ? card : null
+        return getSubtype(d) === targetNorm ? card : null
       }
 
       // 2. localStorage cache
@@ -1658,7 +1668,7 @@ async function applySubtypeFilterAsync(cards, targetSubfilter) {
       if (persisted) {
         cardDetailCache.set(id, persisted)
         const d = persisted.en || persisted.ja
-        return d?.suffix === targetSubfilter ? card : null
+        return getSubtype(d) === targetNorm ? card : null
       }
 
       // 3. Fetch from API (only for uncached cards)
@@ -1669,7 +1679,7 @@ async function applySubtypeFilterAsync(cards, targetSubfilter) {
         const detail = { en: d, ja: null }
         cardDetailCache.set(id, detail)
         lsDetailSet(id, detail)
-        return d?.suffix === targetSubfilter ? card : null
+        return getSubtype(d) === targetNorm ? card : null
       } catch {
         return null
       }
