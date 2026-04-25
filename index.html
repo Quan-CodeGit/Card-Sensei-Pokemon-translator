@@ -1908,8 +1908,11 @@ async function doSearch(query) {
       ...enCards.map(c => ({ ...c, _lang: 'en' })),
       ...jpOnly,
     ]
-    searchCache.set(key, merged)
-    lsCacheSet(key, merged)   // persist: next page load is instant
+    // Only cache non-empty results — avoids poisoning cache if API temporarily fails/returns []
+    if (merged.length > 0) {
+      searchCache.set(key, merged)
+      lsCacheSet(key, merged)   // persist: next page load is instant
+    }
 
     showSkeleton(false)
     renderSearchResult(query, merged)
@@ -2643,10 +2646,14 @@ function lsCacheGet(query) {
     if (!raw) return null
     const { ts, data } = JSON.parse(raw)
     if (Date.now() - ts > LS_CACHE_TTL) { localStorage.removeItem('cs_q_' + query); return null }
+    // Reject cached empty arrays — these are poisoned entries from failed API calls
+    if (!Array.isArray(data) || data.length === 0) { localStorage.removeItem('cs_q_' + query); return null }
     return data
   } catch { return null }
 }
 function lsCacheSet(query, data) {
+  // Only write non-empty results to localStorage
+  if (!Array.isArray(data) || data.length === 0) return
   try { localStorage.setItem('cs_q_' + query, JSON.stringify({ ts: Date.now(), data })) } catch {}
 }
 
