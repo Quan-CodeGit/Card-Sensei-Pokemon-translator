@@ -1519,7 +1519,11 @@ async function fetchTimed(url, ms = 6000) {
 document.getElementById('search-input').addEventListener('input', () => {
   clearTimeout(debounceTimer)
   const q = document.getElementById('search-input').value.trim()
-  if (!q) { showEmpty(); return }
+  if (!q) {
+    // Energy browse mode — show all Energy cards even with no query
+    if (filters.category === 'Energy') { clearTimeout(debounceTimer); doSearch(''); return }
+    showEmpty(); return
+  }
 
   // Cache hit → render IMMEDIATELY, zero delay, no skeleton flash
   const hit = getCachedResult(q.toLowerCase() + filterCacheKey())
@@ -1726,16 +1730,17 @@ function updateExpansionDropdown(cards) {
 async function reapplyClientFilters() {
   const q = document.getElementById('search-input').value.trim()
   if (!lastSearchResults.length) {
-    if (q) { clearTimeout(debounceTimer); doSearch(q) }
+    // Energy browse: auto-fetch all Energy cards even with no query
+    if (q || filters.category === 'Energy') { clearTimeout(debounceTimer); doSearch(q) }
     return
   }
   hide('no-results'); hide('results-section')
   let visible = applyClientFilters(lastSearchResults)
 
-  // Trainer & Energy subtypes require per-card detail fetch for `suffix` field
+  // Only Trainer subtypes require per-card detail fetch for the `suffix` field.
+  // Energy Basic/Special is always handled client-side via name matching — no API call needed.
   const needsDetailFilter = filters.subfilter !== 'all'
-    && filters.category !== 'all'
-    && filters.category !== 'Pokemon'
+    && filters.category === 'Trainer'
   if (needsDetailFilter) {
     showSkeleton(true)
     visible = await applySubtypeFilterAsync(visible, filters.subfilter)
@@ -1844,7 +1849,7 @@ function setCategoryFilter(val) {
   updateSubfilterRow()
   updateFilterUI()
   const q = document.getElementById('search-input').value.trim()
-  if (q) { clearTimeout(debounceTimer); doSearch(q) }
+  if (q || val === 'Energy') { clearTimeout(debounceTimer); doSearch(q) }
   else reapplyClientFilters()
 }
 
@@ -1913,7 +1918,7 @@ async function doSearch(query) {
 
     // Build filter query params (type + category filters go to the API)
     const filterParams = new URLSearchParams()
-    filterParams.set('name', query)
+    if (query) filterParams.set('name', query)   // omit name param when browsing by category only
     if (filters.category !== 'all') filterParams.set('category', filters.category)
     filters.types.forEach(t => filterParams.append('types[]', t))
     // NOTE: subfilter (Supporter/Item/Tool/Stadium/Basic/Special) is NOT sent to the API.
