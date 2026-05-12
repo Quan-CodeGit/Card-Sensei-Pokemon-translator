@@ -1642,6 +1642,8 @@ function applyClientFilters(cards) {
       if (filters.subfilter === 'rulebox' && !rb) return false
       if (filters.subfilter === 'normal'  &&  rb) return false
     }
+    // Energy cards without an image are duplicates or placeholder entries — hide them
+    if (filters.category === 'Energy' && !c.image) return false
     // Energy Basic/Special sub-filter — client-side name-based detection (instant, no API call)
     // Basic Energy = exactly "[Type] Energy"; everything else is Special Energy.
     if (filters.category === 'Energy' && filters.subfilter !== 'all') {
