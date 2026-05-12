@@ -1894,7 +1894,6 @@ async function doSearch(query) {
   const baseKey = query.toLowerCase().trim()
   const fSuffix = filterCacheKey()           // '' when no API-level filters active
   const key     = baseKey + fSuffix
-  const hasJP   = isJapaneseQuery(query)
 
   // Mark this as the active search — any older concurrent call will bail when it resolves
   searchInFlight = key
@@ -1922,32 +1921,13 @@ async function doSearch(query) {
     // applySubtypeFilterAsync() after we receive the list results.
 
     const enUrl = `${BASE}/en/cards?${filterParams}`
-    const jaUrl = `${BASE}/ja/cards?name=${encodeURIComponent(query)}`  // JA API: name only
-
-    // JA API only understands Japanese card names — skip for English queries
-    let enCards, jaCards
-    if (hasJP) {
-      const [enRaw, jaRaw] = await Promise.all([fetchTimed(enUrl), fetchTimed(jaUrl)])
-      enCards = Array.isArray(enRaw) ? enRaw : []
-      jaCards = Array.isArray(jaRaw) ? jaRaw : []
-    } else {
-      const enRaw = await fetchTimed(enUrl)
-      enCards = Array.isArray(enRaw) ? enRaw : []
-      jaCards = []
-    }
+    const enRaw = await fetchTimed(enUrl)
+    const enCards = Array.isArray(enRaw) ? enRaw : []
 
     // If another search started while we were fetching, discard stale results
     if (searchInFlight !== key) return
 
-    const enIdSet = new Set(enCards.map(c => c.id))
-    const jpOnly  = jaCards
-      .filter(jc => { const e = toEnglishCardId(jc.id); return !e || !enIdSet.has(e) })
-      .map(c => ({ ...c, _jpOnly: true, _lang: 'ja' }))
-
-    const merged = [
-      ...enCards.map(c => ({ ...c, _lang: 'en' })),
-      ...jpOnly,
-    ]
+    const merged = enCards.map(c => ({ ...c, _lang: 'en' }))
     // Only cache non-empty results — avoids poisoning cache if API temporarily fails/returns []
     if (merged.length > 0) {
       searchCache.set(key, merged)
@@ -1987,12 +1967,7 @@ function renderGrid(cards) {
   const hdr  = document.getElementById('results-header')
   const grid = document.getElementById('card-grid')
 
-  const enCount = cards.filter(c=>!c._jpOnly).length
-  const jpCount = cards.filter(c=>c._jpOnly).length
-  let hdrText = `${cards.length} result${cards.length!==1?'s':''} found`
-  if (jpCount>0) hdrText += ` <span>(${jpCount} JP-only)</span>`
-  hdrText += ` <span>— click a card to translate</span>`
-  hdr.innerHTML = hdrText
+  hdr.innerHTML = `${cards.length} result${cards.length!==1?'s':''} found <span>— click a card for details</span>`
 
   grid.innerHTML = cards.map((card, i) => {
     const imgBase = card.image ? card.image : null
