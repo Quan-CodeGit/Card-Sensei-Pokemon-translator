@@ -1848,7 +1848,7 @@ function setCategoryFilter(val) {
   updateFilterUI()
   const q = document.getElementById('search-input').value.trim()
   if (q || val === 'Energy') { clearTimeout(debounceTimer); doSearch(q) }
-  else reapplyClientFilters()
+  else { lastSearchResults = []; showEmpty() }
 }
 
 function setSubfilter(val) {
