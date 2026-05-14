@@ -1497,10 +1497,6 @@ const imgObserver = new IntersectionObserver((entries) => {
 // SEARCH + DEBOUNCE
 // ═══════════════════════════════════════════════════
 
-/** True if string contains hiragana / katakana / kanji */
-function isJapaneseQuery(str) {
-  return /[\u3040-\u9FFF]/.test(str)
-}
 
 /** fetch() with a hard timeout via AbortController */
 async function fetchTimed(url, ms = 6000) {
@@ -2134,7 +2130,7 @@ async function openModal(id, lang) {
 }
 
 function renderModal({ ja, en, id, primaryCard, sourceLang }) {
-  const primary    = en ?? ja
+  const primary    = primaryCard ?? en ?? ja
   if (!primary) return
 
   const imgBase  = (en?.image ?? ja?.image)
@@ -3313,7 +3309,7 @@ function shareDeck() {
   if (!d) return
   const payload = {
     n: d.name,
-    c: d.cards.map(e => ({ i:e.card.id, q:e.qty, n:e.card.name, img:e.card.image, li:e.card.localId, la:e.card._lang }))
+    c: d.cards.map(e => ({ i:e.card.id, q:e.qty, n:e.card.name, img:e.card.image, li:e.card.localId, la:e.card._lang, s:e.card.set }))
   }
   try {
     const encoded = btoa(unescape(encodeURIComponent(JSON.stringify(payload))))
@@ -3349,7 +3345,7 @@ function importDeck() {
   const p = window._pendingImport
   if (!p) return
   const cards = p.c.map(c => ({
-    card: { id:c.i, name:c.n, image:c.img, localId:c.li, _lang:c.la||'en' },
+    card: { id:c.i, name:c.n, image:c.img, localId:c.li, _lang:c.la||'en', set:c.s },
     qty: c.q
   }))
   const nd = { id: uid(), name: p.n + ' (imported)', cards }
