@@ -1074,6 +1074,15 @@ footer {
     <div class="header-right">
       <span class="header-subtitle">カード先生</span>
       <span class="header-badge">Pokémon TCG · Translation</span>
+      <button onclick="clearCache()" title="Refresh card data" id="refresh-btn"
+        style="display:flex;align-items:center;gap:0.35rem;padding:0.25rem 0.65rem;
+               border-radius:999px;border:1px solid rgba(255,255,255,0.25);
+               color:rgba(255,255,255,0.65);font-size:0.62rem;font-family:var(--font-mono);
+               letter-spacing:0.1em;text-transform:uppercase;transition:all 0.18s"
+        onmouseover="this.style.borderColor='rgba(255,255,255,0.7)';this.style.color='#fff'"
+        onmouseout="this.style.borderColor='rgba(255,255,255,0.25)';this.style.color='rgba(255,255,255,0.65)'">
+        <span id="refresh-icon" style="font-size:0.8rem">↻</span> Refresh
+      </button>
     </div>
   </div>
 </header>
@@ -2687,6 +2696,37 @@ function lsDetailGet(id) {
 }
 function lsDetailSet(id, data) {
   try { localStorage.setItem('cs_detail_' + id, JSON.stringify({ ts: Date.now(), data })) } catch {}
+}
+
+// ═══════════════════════════════════════════════════
+// CACHE REFRESH
+// ═══════════════════════════════════════════════════
+function clearCache() {
+  // Spin the icon while working
+  const icon = document.getElementById('refresh-icon')
+  if (icon) { icon.style.display = 'inline-block'; icon.style.animation = 'spin 0.6s linear 1' }
+
+  // Clear in-memory caches
+  searchCache.clear()
+  cardDetailCache.clear()
+  lastSearchResults = []
+
+  // Remove all search + detail entries from localStorage (leave deck/box data untouched)
+  const toRemove = []
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i)
+    if (k.startsWith('cs_q_') || k.startsWith('cs_detail_')) toRemove.push(k)
+  }
+  toRemove.forEach(k => localStorage.removeItem(k))
+
+  showToast(`↻ Cache cleared — ${toRemove.length} entr${toRemove.length !== 1 ? 'ies' : 'y'} removed`)
+
+  // Re-run the current search with fresh data
+  setTimeout(() => {
+    if (icon) icon.style.animation = ''
+    const q = document.getElementById('search-input').value.trim()
+    if (q || filters.category === 'Energy') doSearch(q)
+  }, 650)
 }
 
 // ═══════════════════════════════════════════════════
