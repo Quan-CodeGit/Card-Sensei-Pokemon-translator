@@ -2649,7 +2649,7 @@ function setMode(m) {
 function showScanState(s) {
   ;['filter','camera','comparing','results','error'].forEach(name => {
     const el = document.getElementById('scan-s-' + name)
-    if (el) el.style.display = (name === s) ? '' : 'none'
+    if (el) el.style.display = (name === s) ? 'block' : 'none'
   })
 }
 
