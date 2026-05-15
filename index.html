@@ -1289,10 +1289,13 @@ footer {
               </div>
               <div class="scan-crosshair" id="scan-crosshair" style="display:none"></div>
             </div>
-            <div style="display:flex;gap:0.5rem">
+            <div style="display:flex;gap:0.5rem;margin-bottom:0.5rem">
               <button class="btn-gold" id="scan-capture-btn" onclick="captureCard()" style="flex:1" disabled>📸 Capture</button>
               <button class="btn-ghost" onclick="closeScanCamera();showScanState('filter')" style="flex-shrink:0">✕ Cancel</button>
             </div>
+            <button class="btn-ghost" onclick="openGoogleLens()" style="width:100%;font-size:0.75rem;opacity:0.8">
+              🔍 Can't find it? Try Google Lens instead
+            </button>
           </div>
 
           <!-- State: comparing -->
@@ -1312,7 +1315,12 @@ footer {
           <div id="scan-s-results" class="scan-section">
             <p class="scan-results-hdr">Top matches — tap a card to view details</p>
             <div class="scan-live-results" id="scan-final-list"></div>
-            <button class="btn-ghost" onclick="showScanState('filter')" style="width:100%;margin-top:0.75rem">↩ Scan again</button>
+            <div style="display:flex;flex-direction:column;gap:0.4rem;margin-top:0.75rem">
+              <button class="btn-ghost" onclick="showScanState('filter')" style="width:100%">↩ Scan again</button>
+              <button class="btn-ghost" onclick="openGoogleLens()" style="width:100%;font-size:0.75rem;opacity:0.8">
+                🔍 Not right? Try Google Lens for better accuracy
+              </button>
+            </div>
           </div>
 
           <!-- State: error -->
@@ -2737,30 +2745,83 @@ function captureCard() {
   runImageComparison(c)
 }
 
-// ── Perceptual hash (average hash 16×16) ───────────
-function computeArtHash(source) {
-  // Art region: y 14%–58%, x 7%–93% of source dimensions
-  const sw = source.naturalWidth  || source.width  || source.videoWidth  || 640
-  const sh = source.naturalHeight || source.height || source.videoHeight || 480
+// ── Image fingerprinting (3 signals) ───────────────
+
+// Helper: crop art region from any image source into a small canvas
+function _artCanvas(source, W, H) {
+  const sw = source.naturalWidth  || source.width  || 640
+  const sh = source.naturalHeight || source.height || 480
   const ax = Math.round(sw * 0.07), ay = Math.round(sh * 0.14)
   const aw = Math.round(sw * 0.86), ah = Math.round(sh * 0.44)
-  const SIZE = 16
   const tmp = document.createElement('canvas')
-  tmp.width = SIZE; tmp.height = SIZE
-  const ctx = tmp.getContext('2d')
-  ctx.drawImage(source, ax, ay, aw, ah, 0, 0, SIZE, SIZE)
-  const { data } = ctx.getImageData(0, 0, SIZE, SIZE)
+  tmp.width = W; tmp.height = H
+  tmp.getContext('2d').drawImage(source, ax, ay, aw, ah, 0, 0, W, H)
+  return tmp
+}
+
+// Signal 1 — aHash (average hash 16×16, 256 bits): general structure
+function computeArtHash(source) {
+  const tmp = _artCanvas(source, 16, 16)
+  const { data } = tmp.getContext('2d').getImageData(0, 0, 16, 16)
   const pixels = []
   for (let i = 0; i < data.length; i += 4)
-    pixels.push(0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2])
+    pixels.push(0.299*data[i] + 0.587*data[i+1] + 0.114*data[i+2])
   const mean = pixels.reduce((a, b) => a + b, 0) / pixels.length
   return pixels.map(p => p >= mean ? 1 : 0)
 }
 
+// Signal 2 — dHash (difference hash 8×9→64 bits): edge gradients, lighting-resistant
+function computeArtDHash(source) {
+  const W = 9, H = 8
+  const tmp = _artCanvas(source, W, H)
+  const { data } = tmp.getContext('2d').getImageData(0, 0, W, H)
+  const hash = []
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W - 1; x++) {
+      const i = (y * W + x) * 4, j = (y * W + x + 1) * 4
+      const lA = 0.299*data[i]   + 0.587*data[i+1] + 0.114*data[i+2]
+      const lB = 0.299*data[j]   + 0.587*data[j+1] + 0.114*data[j+2]
+      hash.push(lA > lB ? 1 : 0)
+    }
+  }
+  return hash  // 64 bits
+}
+
+// Signal 3 — Hue histogram (12 bins): dominant color signature, bright-invariant
+function computeHueHistogram(source, BINS = 12) {
+  const tmp = _artCanvas(source, 32, 32)
+  const { data } = tmp.getContext('2d').getImageData(0, 0, 32, 32)
+  const hist = new Array(BINS).fill(0)
+  for (let i = 0; i < data.length; i += 4) {
+    const r = data[i]/255, g = data[i+1]/255, b = data[i+2]/255
+    const max = Math.max(r, g, b), min = Math.min(r, g, b), s = max - min
+    if (s < 0.15 || max < 0.12) continue   // skip near-gray / near-black pixels
+    let h
+    if      (max === r) h = ((g - b) / s + 6) % 6
+    else if (max === g) h = (b - r) / s + 2
+    else                h = (r - g) / s + 4
+    hist[Math.floor(h / 6 * BINS) % BINS]++
+  }
+  const total = hist.reduce((a, b) => a + b, 0) || 1
+  return hist.map(v => v / total)
+}
+
+// Bhattacharyya coefficient: 0=no overlap → 1=identical
+function histSimilarity(a, b) {
+  return a.reduce((sum, v, i) => sum + Math.sqrt(v * b[i]), 0)
+}
+
 function hashDistance(a, b) {
-  let d = 0
-  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) d++
-  return d
+  let d = 0; for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) d++; return d
+}
+
+// Combined 0–1 score (lower = better match)
+// dHash 40% + hue histogram 40% + aHash 20%
+function combinedScore(capA, capD, capH, cardA, cardD, cardH) {
+  const aDist = hashDistance(capA, cardA) / 256
+  const dDist = hashDistance(capD, cardD) / 64
+  const hDist = 1 - histSimilarity(capH, cardH)
+  return dDist * 0.4 + hDist * 0.4 + aDist * 0.2
 }
 
 function loadImageCors(src) {
@@ -2769,9 +2830,28 @@ function loadImageCors(src) {
     img.crossOrigin = 'anonymous'
     img.onload  = () => res(img)
     img.onerror = () => rej(new Error('load failed'))
-    // cache-bust so CORS headers are re-sent
     img.src = src + (src.includes('?') ? '&' : '?') + '_cb=' + Date.now()
   })
+}
+
+// ── Google Lens integration ─────────────────────────
+function openGoogleLens() {
+  const canvas = document.getElementById('scan-canvas')
+  if (!canvas || !canvas.width) { window.open('https://lens.google.com/', '_blank'); return }
+  canvas.toBlob(blob => {
+    if (!blob) { window.open('https://lens.google.com/', '_blank'); return }
+    const file = new File([blob], 'pokemon-card.jpg', { type: 'image/jpeg' })
+    // Mobile: share directly to Google Lens app via Web Share API
+    if (navigator.canShare?.({ files: [file] })) {
+      navigator.share({ files: [file], title: 'Pokémon Card' }).catch(() => {})
+    } else {
+      // Desktop: download the image + open Google Lens so user can upload it
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a'); a.href = url; a.download = 'pokemon-card.jpg'; a.click()
+      URL.revokeObjectURL(url)
+      setTimeout(() => window.open('https://lens.google.com/', '_blank'), 400)
+    }
+  }, 'image/jpeg', 0.92)
 }
 
 // ── Main comparison pipeline ────────────────────────
@@ -2779,10 +2859,16 @@ async function runImageComparison(capturedCanvas) {
   showScanState('comparing')
   document.getElementById('scan-live-list').innerHTML = ''
 
-  // Hash the captured card art
-  let capturedHash
-  try { capturedHash = computeArtHash(capturedCanvas) }
-  catch { showScanError('Could not process the captured image. Please try again.'); return }
+  // Pre-compute all 3 fingerprints for the captured image
+  let capA, capD, capH
+  try {
+    capA = computeArtHash(capturedCanvas)
+    capD = computeArtDHash(capturedCanvas)
+    capH = computeHueHistogram(capturedCanvas)
+  } catch {
+    showScanError('Could not process the captured image. Please try again.')
+    return
+  }
 
   // Fetch candidate pool
   let candidates = []
@@ -2809,10 +2895,10 @@ async function runImageComparison(capturedCanvas) {
     return
   }
 
-  const total  = candidates.length
-  let checked  = 0
-  const TOP_N  = 5
-  let top      = []   // [{card, dist}]
+  const total = candidates.length
+  let checked = 0
+  const TOP_N = 5
+  let top = []   // [{card, score}]
 
   updateScanProgress(0, total, top)
 
@@ -2821,24 +2907,26 @@ async function runImageComparison(capturedCanvas) {
     const batch = candidates.slice(i, i + BATCH)
     await Promise.all(batch.map(async card => {
       try {
-        const img  = await loadImageCors(card.image + '/low.webp')
-        const hash = computeArtHash(img)
-        const dist = hashDistance(capturedHash, hash)
-        top.push({ card, dist })
-        top.sort((a, b) => a.dist - b.dist)
+        const img   = await loadImageCors(card.image + '/low.webp')
+        const cardA = computeArtHash(img)
+        const cardD = computeArtDHash(img)
+        const cardH = computeHueHistogram(img)
+        const score = combinedScore(capA, capD, capH, cardA, cardD, cardH)
+        top.push({ card, score })
+        top.sort((a, b) => a.score - b.score)
         if (top.length > TOP_N) top = top.slice(0, TOP_N)
       } catch { /* skip unloadable images */ }
       checked++
     }))
     updateScanProgress(checked, total, top)
-    await new Promise(r => setTimeout(r, 0)) // yield to browser paint
+    await new Promise(r => setTimeout(r, 0))
   }
 
   showScanFinalResults(top)
 }
 
 function updateScanProgress(checked, total, top) {
-  const pct  = total > 0 ? checked / total : 0
+  const pct   = total > 0 ? checked / total : 0
   const fill  = document.getElementById('scan-pfill')
   const ball  = document.getElementById('scan-pokeball')
   const label = document.getElementById('scan-prog-label')
@@ -2846,10 +2934,8 @@ function updateScanProgress(checked, total, top) {
 
   if (fill)  fill.style.width = (pct * 100).toFixed(1) + '%'
   if (ball) {
-    const track = ball.parentElement
-    const tw    = track ? track.offsetWidth : 200
-    const leftPx = Math.max(14, Math.round(pct * (tw - 14)))
-    ball.style.left = leftPx + 'px'
+    const tw = (ball.parentElement?.offsetWidth || 200) - 14
+    ball.style.left = Math.max(14, Math.round(pct * tw)) + 'px'
   }
   if (label) label.textContent = pct >= 1 ? 'Comparison complete!' : 'Comparing images…'
   if (text)  text.textContent  = `${checked} / ${total} cards checked`
@@ -2857,12 +2943,12 @@ function updateScanProgress(checked, total, top) {
 }
 
 function scanResultCardHTML(entry, rank) {
-  const { card, dist } = entry
-  const rankLabel = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : `#${rank}`
-  const imgHtml   = card.image
+  const { card, score } = entry
+  const rankLabel  = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : `#${rank}`
+  const imgHtml    = card.image
     ? `<img class="scan-result-img" src="${card.image}/low.webp" alt="${card.name}" loading="lazy">`
     : `<div class="scan-result-img-ph">🃏</div>`
-  const similarity = Math.round((1 - dist / 256) * 100)
+  const similarity = Math.round((1 - score) * 100)
   const setName    = card.set?.name ?? card.set ?? ''
   const localId    = card.localId ?? ''
   const sub        = [setName, localId].filter(Boolean).join(' · ')
