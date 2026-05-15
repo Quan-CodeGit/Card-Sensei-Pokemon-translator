@@ -2635,12 +2635,16 @@ function setMode(m) {
   const isType = m === 'type'
   document.getElementById('tab-type').className = 'mode-tab' + (isType ? ' active' : '')
   document.getElementById('tab-scan').className  = 'mode-tab' + (!isType ? ' active' : '')
-  document.getElementById('mode-type').style.display = isType ? '' : 'none'
-  document.getElementById('mode-scan').style.display = isType ? 'none' : ''
+  const modeType = document.getElementById('mode-type')
+  const modeScan = document.getElementById('mode-scan')
   if (isType) {
+    modeType.style.display = ''
+    modeScan.classList.add('hidden')
     closeScanCamera()
     document.getElementById('search-input').focus()
   } else {
+    modeType.style.display = 'none'
+    modeScan.classList.remove('hidden')
     showScanState('filter')
     initScanTypeChips()
   }
