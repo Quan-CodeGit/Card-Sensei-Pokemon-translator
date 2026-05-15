@@ -1256,7 +1256,7 @@ footer {
       </div>
 
       <!-- Scan mode -->
-      <div id="mode-scan" class="hidden">
+      <div id="mode-scan" style="display:none">
         <div class="scan-wrap">
 
           <!-- State: filter -->
@@ -2639,12 +2639,19 @@ function setMode(m) {
   const modeScan = document.getElementById('mode-scan')
   if (isType) {
     modeType.style.display = ''
-    modeScan.classList.add('hidden')
+    modeScan.style.display = 'none'
+    // restore empty state if no results are showing
+    if (document.getElementById('results-section')?.classList.contains('hidden')
+     && document.getElementById('no-results')?.classList.contains('hidden')) {
+      show('empty-state')
+    }
     closeScanCamera()
     document.getElementById('search-input').focus()
   } else {
     modeType.style.display = 'none'
-    modeScan.classList.remove('hidden')
+    modeScan.style.display = 'block'
+    // hide results area while in scan mode
+    hide('results-section'); hide('no-results'); hide('skeleton-section'); hide('empty-state')
     showScanState('filter')
     initScanTypeChips()
   }
