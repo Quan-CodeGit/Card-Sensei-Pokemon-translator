@@ -1276,7 +1276,10 @@ footer {
               <span class="scan-filter-label">Type</span>
               <div class="scan-types-row" id="scan-type-chips"></div>
             </div>
-            <button class="btn-gold" onclick="openScanCamera()" style="width:100%;margin-top:0.5rem">📷 Open Camera</button>
+            <div style="display:flex;gap:0.5rem;margin-top:0.5rem">
+              <button class="btn-gold" onclick="openScanCamera()" style="flex:1">📷 Open Camera</button>
+              <button class="btn-ghost" onclick="pasteFromClipboard()" title="Paste card name copied from Google Lens" style="flex-shrink:0;font-size:0.8rem">📋 Paste</button>
+            </div>
           </div>
 
           <!-- State: camera -->
@@ -2963,6 +2966,23 @@ function editScanName() {
   input.value = name
   input.focus()
   input.select()
+}
+
+async function pasteFromClipboard() {
+  try {
+    const text = (await navigator.clipboard.readText()).trim()
+    if (!text) { showToast('Clipboard is empty — copy the card name from Google Lens first'); return }
+    setMode('type')
+    const input = document.getElementById('search-input')
+    input.value = text
+    clearTimeout(debounceTimer)
+    doSearch(text)
+  } catch {
+    // Clipboard permission denied or not supported — fall back to manual input
+    setMode('type')
+    document.getElementById('search-input').focus()
+    showToast('Could not read clipboard — paste manually into the search bar')
+  }
 }
 
 // ── Main comparison pipeline ────────────────────────
