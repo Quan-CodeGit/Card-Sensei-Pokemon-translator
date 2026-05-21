@@ -1276,6 +1276,30 @@ footer {
               <span class="scan-filter-label">Type</span>
               <div class="scan-types-row" id="scan-type-chips"></div>
             </div>
+            <!-- Pokémon stage subfilter -->
+            <div id="scan-sub-pokemon" class="scan-filter-row" style="display:none">
+              <span class="scan-filter-label">Stage</span>
+              <button class="scan-chip active" data-subval="all"     onclick="setScanSubfilter('all')">All</button>
+              <button class="scan-chip"        data-subval="Basic"   onclick="setScanSubfilter('Basic')">Basic</button>
+              <button class="scan-chip"        data-subval="Stage 1" onclick="setScanSubfilter('Stage 1')">Stage 1</button>
+              <button class="scan-chip"        data-subval="Stage 2" onclick="setScanSubfilter('Stage 2')">Stage 2</button>
+            </div>
+            <!-- Trainer subfilter -->
+            <div id="scan-sub-trainer" class="scan-filter-row" style="display:none">
+              <span class="scan-filter-label">Kind</span>
+              <button class="scan-chip active" data-subval="all"       onclick="setScanSubfilter('all')">All</button>
+              <button class="scan-chip"        data-subval="Supporter" onclick="setScanSubfilter('Supporter')">Supporter</button>
+              <button class="scan-chip"        data-subval="Item"      onclick="setScanSubfilter('Item')">Item</button>
+              <button class="scan-chip"        data-subval="Tool"      onclick="setScanSubfilter('Tool')">Tool</button>
+              <button class="scan-chip"        data-subval="Stadium"   onclick="setScanSubfilter('Stadium')">Stadium</button>
+            </div>
+            <!-- Energy subfilter -->
+            <div id="scan-sub-energy" class="scan-filter-row" style="display:none">
+              <span class="scan-filter-label">Kind</span>
+              <button class="scan-chip active" data-subval="all"             onclick="setScanSubfilter('all')">All</button>
+              <button class="scan-chip"        data-subval="Basic Energy"    onclick="setScanSubfilter('Basic Energy')">Basic</button>
+              <button class="scan-chip"        data-subval="Special Energy"  onclick="setScanSubfilter('Special Energy')">Special</button>
+            </div>
             <div style="display:flex;gap:0.5rem;margin-top:0.5rem">
               <button class="btn-gold" onclick="openScanCamera()" style="flex:1">📷 Open Camera</button>
               <button class="btn-ghost" onclick="pasteFromClipboard()" title="Paste card name copied from Google Lens" style="flex-shrink:0;font-size:0.8rem">📋 Paste</button>
@@ -1567,7 +1591,7 @@ const cardDataStore   = new Map()   // cardId → brief card data (populated by 
 let debounceTimer  = null
 let searchInFlight = null
 let currentTab    = 'deck'   // 'deck' | 'box'
-const scanFilters  = { category: 'all', types: new Set() }
+const scanFilters  = { category: 'all', types: new Set(), subfilter: 'all' }
 let scanMediaStream = null
 let modalCardData = null     // set in renderModal, used by qty controls
 
@@ -2711,13 +2735,30 @@ function showScanState(s) {
 function setScanCategory(cat) {
   scanFilters.category = cat
   scanFilters.types.clear()
+  scanFilters.subfilter = 'all'
   ;['all','Pokemon','Trainer','Energy'].forEach(c => {
     const btn = document.getElementById('scan-cat-' + c)
     if (btn) btn.className = 'scan-chip' + (c === cat ? ' active' : '')
   })
+  // Type chips — only for Pokémon
   const typeRow = document.getElementById('scan-type-row')
   if (typeRow) typeRow.style.display = (cat === 'Pokemon') ? '' : 'none'
   if (cat === 'Pokemon') initScanTypeChips()
+  // Subfilter rows
+  document.getElementById('scan-sub-pokemon').style.display = (cat === 'Pokemon') ? '' : 'none'
+  document.getElementById('scan-sub-trainer').style.display = (cat === 'Trainer') ? '' : 'none'
+  document.getElementById('scan-sub-energy').style.display  = (cat === 'Energy')  ? '' : 'none'
+  // Reset all subfilter chips to 'all' active
+  document.querySelectorAll('[data-subval]').forEach(btn =>
+    btn.classList.toggle('active', btn.dataset.subval === 'all')
+  )
+}
+
+function setScanSubfilter(val) {
+  scanFilters.subfilter = val
+  document.querySelectorAll('[data-subval]').forEach(btn =>
+    btn.classList.toggle('active', btn.dataset.subval === val)
+  )
 }
 
 function toggleScanType(t) {
@@ -2953,6 +2994,11 @@ async function readCardWithAI(canvas) {
     const fullDataURL = canvas.toDataURL('image/png')        // lossless full card
     const nameDataURL = _nameRegionDataURL(canvas)           // 2× upscaled name strip
 
+    // Build subfilter hint from user's manual selection
+    const subHint = scanFilters.subfilter !== 'all'
+      ? `\nThe user has identified this as a "${scanFilters.subfilter}" card — factor this into your answer.`
+      : ''
+
     const prompt = `You are an expert Pokémon TCG card reader.
 I am sending you two images: (1) the full card, (2) a 2× zoomed crop of the top name area.
 
@@ -2969,7 +3015,7 @@ Rules:
     Prism Star  → append "◇"
     Break       → append "BREAK"
 - Do NOT include HP, type, set, number, artist, or any other information
-- Reply with ONLY the card name — no punctuation, no explanation, nothing else`
+- Reply with ONLY the card name — no punctuation, no explanation, nothing else${subHint}`
 
     const resp = await puter.ai.chat(
       [{ role: 'user', content: [
@@ -3054,6 +3100,9 @@ async function runImageComparison(capturedCanvas) {
     const params = new URLSearchParams()
     if (scanFilters.category !== 'all') params.set('category', scanFilters.category)
     if (scanFilters.types.size > 0) params.set('types', [...scanFilters.types].join(','))
+    // Pokémon stage — TCGDex supports this as a list param
+    if (scanFilters.category === 'Pokemon' && scanFilters.subfilter !== 'all')
+      params.set('stage', scanFilters.subfilter)
     const url = `https://api.tcgdex.net/v2/en/cards${params.toString() ? '?' + params : ''}`
     const cacheKey = 'scan__' + url
     let raw = searchCache.get(cacheKey)
@@ -3063,6 +3112,11 @@ async function runImageComparison(capturedCanvas) {
       if (Array.isArray(raw)) searchCache.set(cacheKey, raw)
     }
     candidates = (Array.isArray(raw) ? raw : []).filter(c => c.image)
+    // Energy Basic/Special — client-side name match (instant, no extra fetch)
+    if (scanFilters.category === 'Energy' && scanFilters.subfilter !== 'all') {
+      const wantBasic = scanFilters.subfilter === 'Basic Energy'
+      candidates = candidates.filter(c => isBasicEnergyCard(c.name) === wantBasic)
+    }
   } catch {
     showScanError('Failed to fetch card list. Check your connection and try again.')
     return
