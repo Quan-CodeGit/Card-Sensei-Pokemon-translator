@@ -2874,20 +2874,32 @@ function loadImageCors(src) {
 function openGoogleLens() {
   const canvas = document.getElementById('scan-canvas')
   if (!canvas || !canvas.width) { window.open('https://lens.google.com/', '_blank'); return }
-  canvas.toBlob(blob => {
+
+  canvas.toBlob(async blob => {
     if (!blob) { window.open('https://lens.google.com/', '_blank'); return }
+
     const file = new File([blob], 'pokemon-card.jpg', { type: 'image/jpeg' })
-    // Mobile: share directly to Google Lens app via Web Share API
+
+    // Mobile — Web Share API opens Google Lens app directly
     if (navigator.canShare?.({ files: [file] })) {
       navigator.share({ files: [file], title: 'Pokémon Card' }).catch(() => {})
-    } else {
-      // Desktop: download the image + open Google Lens so user can upload it
+      return
+    }
+
+    // Desktop — copy image to clipboard, then open Google Lens
+    // User can paste (Ctrl+V) straight into the Lens search box
+    try {
+      await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
+      showToast('📋 Image copied — paste it in Google Lens with Ctrl+V')
+    } catch {
+      // Clipboard image API not supported — fall back to file download
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a'); a.href = url; a.download = 'pokemon-card.jpg'; a.click()
       URL.revokeObjectURL(url)
-      setTimeout(() => window.open('https://lens.google.com/', '_blank'), 400)
+      showToast('📥 Photo saved — upload it on Google Lens')
     }
-  }, 'image/jpeg', 0.92)
+    window.open('https://lens.google.com/', '_blank')
+  }, 'image/png')
 }
 
 // ── Puter.js AI card reading ────────────────────────
