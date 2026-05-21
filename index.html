@@ -1071,7 +1071,7 @@ footer {
 .scan-chip-type.active { border-color: var(--red); box-shadow: 0 0 0 2px var(--red)33; }
 .scan-types-row { display: flex; gap: 0.4rem; flex-wrap: wrap; }
 /* Camera viewport */
-.scan-viewport { position: relative; width: 100%; aspect-ratio: 16/10; background: #111;
+.scan-viewport { position: relative; width: 100%; aspect-ratio: 3/4; background: #111;
   border-radius: 0.75rem; overflow: hidden; margin-bottom: 0.75rem; }
 .scan-viewport video { width: 100%; height: 100%; object-fit: cover; display: none; }
 .scan-viewport canvas { width: 100%; height: 100%; object-fit: cover; display: none; }
@@ -2743,7 +2743,7 @@ function openScanCamera() {
   if (xhair)      xhair.style.display = 'none'
 
   navigator.mediaDevices.getUserMedia({
-    video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
+    video: { facingMode: 'environment', width: { ideal: 720 }, height: { ideal: 960 } }
   }).then(stream => {
     scanMediaStream = stream
     const v = document.getElementById('scan-video')
