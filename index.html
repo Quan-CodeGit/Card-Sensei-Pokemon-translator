@@ -2932,17 +2932,52 @@ function _puterText(resp) {
 
 let _lastScanName = ''
 
+// Crop the card name region (top 20%) and upscale 2× for sharper text
+function _nameRegionDataURL(canvas) {
+  const srcW = canvas.width
+  const srcH = Math.round(canvas.height * 0.20)
+  const tmp = document.createElement('canvas')
+  tmp.width = srcW * 2; tmp.height = srcH * 2
+  const ctx = tmp.getContext('2d')
+  ctx.imageSmoothingEnabled = true
+  ctx.imageSmoothingQuality = 'high'
+  ctx.drawImage(canvas, 0, 0, srcW, srcH, 0, 0, srcW * 2, srcH * 2)
+  return tmp.toDataURL('image/png')
+}
+
 async function readCardWithAI(canvas) {
   showScanState('reading')
   try {
     await loadPuterJS()
-    const dataURL = canvas.toDataURL('image/jpeg', 0.85)
+
+    const fullDataURL = canvas.toDataURL('image/png')        // lossless full card
+    const nameDataURL = _nameRegionDataURL(canvas)           // 2× upscaled name strip
+
+    const prompt = `You are an expert Pokémon TCG card reader.
+I am sending you two images: (1) the full card, (2) a 2× zoomed crop of the top name area.
+
+Your task: return the EXACT official English card name.
+
+Rules:
+- If the card is Japanese (katakana/kanji text), give the OFFICIAL English equivalent name
+- Always include the full variant suffix:
+    modern era  → "ex" (lowercase)  e.g. "Charizard ex"
+    XY era      → "EX" (uppercase)  e.g. "Charizard-EX"
+    SM era      → "GX"              e.g. "Mewtwo GX"
+    SwSh era    → "V" / "VMAX" / "VSTAR"
+    Mega        → "Mega" prefix or "M" prefix  e.g. "Mega Rayquaza-EX"
+    Prism Star  → append "◇"
+    Break       → append "BREAK"
+- Do NOT include HP, type, set, number, artist, or any other information
+- Reply with ONLY the card name — no punctuation, no explanation, nothing else`
+
     const resp = await puter.ai.chat(
       [{ role: 'user', content: [
-        { type: 'image_url', image_url: { url: dataURL } },
-        { type: 'text', text: 'This is a Pokémon TCG card. What is the English name of this card? If it is a Japanese card, give me the English equivalent name. Include any suffixes like EX, GX, V, VMAX, VSTAR, ex. Reply with ONLY the card name — no explanation, no punctuation, just the name.' }
+        { type: 'image_url', image_url: { url: fullDataURL } },
+        { type: 'image_url', image_url: { url: nameDataURL } },
+        { type: 'text', text: prompt }
       ]}],
-      { model: 'gpt-4o-mini' }
+      { model: 'gpt-4o' }
     )
     const name = _puterText(resp)
     if (!name) throw new Error('No card name returned')
