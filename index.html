@@ -1304,6 +1304,7 @@ footer {
               <button class="btn-gold" onclick="openScanCamera()" style="flex:1">📷 Open Camera</button>
               <button class="btn-ghost" onclick="pasteFromClipboard()" title="Paste card name copied from Google Lens" style="flex-shrink:0;font-size:0.8rem">📋 Paste</button>
             </div>
+            <p id="scan-count-display" style="display:none;font-size:0.7rem;color:var(--text-secondary);text-align:center;margin-top:0.6rem"></p>
           </div>
 
           <!-- State: camera -->
@@ -1335,6 +1336,7 @@ footer {
                 AI is identifying the card name.<br>
                 You may be asked to sign in to Puter (free).
               </p>
+              <p id="scan-reading-count" style="font-size:0.68rem;color:var(--text-secondary);margin-top:0.75rem;opacity:0.7"></p>
             </div>
           </div>
 
@@ -1382,13 +1384,9 @@ footer {
           <!-- State: error -->
           <div id="scan-s-error" class="scan-section">
             <div class="scan-error-box">
-              <div class="scan-error-icon">⚠️</div>
+              <div class="scan-error-icon" id="scan-err-icon">⚠️</div>
               <p class="scan-error-msg" id="scan-err-msg">An error occurred.</p>
-              <div style="display:flex;flex-direction:column;gap:0.4rem">
-                <button class="btn-ghost" onclick="showScanState('filter')" style="width:100%">↩ Try again</button>
-                <button class="btn-ghost" onclick="runImageComparison(document.getElementById('scan-canvas'))"
-                        style="width:100%;font-size:0.75rem;opacity:0.75">🎯 Try image matching instead</button>
-              </div>
+              <div id="scan-err-actions" style="display:flex;flex-direction:column;gap:0.4rem"></div>
             </div>
           </div>
 
@@ -2722,6 +2720,7 @@ function setMode(m) {
     hide('results-section'); hide('no-results'); hide('skeleton-section'); hide('empty-state')
     showScanState('filter')
     initScanTypeChips()
+    _refreshScanCountUI()
   }
 }
 
@@ -2971,6 +2970,90 @@ function _puterText(resp) {
   return String(resp).trim()
 }
 
+// ── Scan usage counter (localStorage, resets daily) ─
+function _scanToday() {
+  try {
+    const today = new Date().toISOString().slice(0, 10)
+    const s = JSON.parse(localStorage.getItem('cs_scan_ai') || '{}')
+    return s.date === today ? (s.count || 0) : 0
+  } catch { return 0 }
+}
+function _incScanCount() {
+  try {
+    const today = new Date().toISOString().slice(0, 10)
+    const count = _scanToday() + 1
+    localStorage.setItem('cs_scan_ai', JSON.stringify({ date: today, count }))
+    return count
+  } catch { return 1 }
+}
+function _refreshScanCountUI() {
+  const n = _scanToday()
+  const el = document.getElementById('scan-count-display')
+  if (!el) return
+  if (n > 0) {
+    el.textContent = `🤖 ${n} AI scan${n !== 1 ? 's' : ''} used today`
+    el.style.display = ''
+  } else {
+    el.style.display = 'none'
+  }
+}
+
+// ── Error type parser ───────────────────────────────
+function _parseScanError(e) {
+  const raw = String(e?.message || e?.code || e || '').toLowerCase()
+  if (/usage.limit|usage-limit|limit.*chat|quota|rate.?limit/i.test(raw))
+    return {
+      icon: '🚫',
+      msg: 'You\'ve hit your daily AI scan limit on Puter. Limits reset each day.',
+      actions: [
+        { label: '🌐 Use Google Lens instead', fn: 'openGoogleLens()' },
+        { label: '🎯 Try image matching', fn: 'runImageComparison(document.getElementById(\'scan-canvas\'))' },
+        { label: '↩ Go back', fn: 'showScanState(\'filter\')' },
+      ]
+    }
+  if (/cancel|abort/i.test(raw))
+    return {
+      icon: '🔐',
+      msg: 'Sign-in was cancelled. Puter requires a free account for AI scanning.',
+      actions: [
+        { label: '🔄 Try signing in again', fn: 'readCardWithAI(document.getElementById(\'scan-canvas\'))' },
+        { label: '🌐 Use Google Lens instead', fn: 'openGoogleLens()' },
+        { label: '↩ Go back', fn: 'showScanState(\'filter\')' },
+      ]
+    }
+  if (/auth|login|sign|unauthorized|403|permission/i.test(raw))
+    return {
+      icon: '🔐',
+      msg: 'Authentication error. Please sign in to your Puter account.',
+      actions: [
+        { label: '🔄 Try again', fn: 'readCardWithAI(document.getElementById(\'scan-canvas\'))' },
+        { label: '🌐 Use Google Lens instead', fn: 'openGoogleLens()' },
+        { label: '↩ Go back', fn: 'showScanState(\'filter\')' },
+      ]
+    }
+  if (/network|fetch|connect|offline|timeout|load/i.test(raw))
+    return {
+      icon: '📡',
+      msg: 'Connection error. Check your internet and try again.',
+      actions: [
+        { label: '🔄 Retry', fn: 'readCardWithAI(document.getElementById(\'scan-canvas\'))' },
+        { label: '↩ Go back', fn: 'showScanState(\'filter\')' },
+      ]
+    }
+  // Generic
+  const display = raw.length > 120 ? raw.slice(0, 120) + '…' : (raw || 'Unknown error')
+  return {
+    icon: '⚠️',
+    msg: `AI scan failed: ${display}`,
+    actions: [
+      { label: '🔄 Retry', fn: 'readCardWithAI(document.getElementById(\'scan-canvas\'))' },
+      { label: '🌐 Use Google Lens instead', fn: 'openGoogleLens()' },
+      { label: '🎯 Try image matching', fn: 'runImageComparison(document.getElementById(\'scan-canvas\'))' },
+      { label: '↩ Go back', fn: 'showScanState(\'filter\')' },
+    ]
+  }
+}
+
 let _lastScanName = ''
 
 // Crop the card name region (top 20%) and upscale 2× for sharper text
@@ -2988,6 +3071,11 @@ function _nameRegionDataURL(canvas) {
 
 async function readCardWithAI(canvas) {
   showScanState('reading')
+  // Increment counter and update UI
+  const scanNum = _incScanCount()
+  _refreshScanCountUI()
+  const countEl = document.getElementById('scan-reading-count')
+  if (countEl) countEl.textContent = `Scan #${scanNum} today`
   try {
     await loadPuterJS()
 
@@ -3032,13 +3120,7 @@ Rules:
     const el = document.getElementById('scan-found-name')
     if (el) el.textContent = name
   } catch (e) {
-    const msg = String(e?.message || e)
-    const isCancelled = /cancel|abort|auth|login|sign/i.test(msg)
-    if (isCancelled) {
-      showScanError('Sign-in was cancelled. Tap "Try image matching" to use the visual search instead.')
-    } else {
-      showScanError('AI could not read the card. ' + msg)
-    }
+    showScanError(e)
   }
 }
 
@@ -3206,10 +3288,17 @@ function showScanFinalResults(top) {
   renderScanLiveResults(top, 'scan-final-list')
 }
 
-function showScanError(msg) {
+function showScanError(e) {
+  const parsed = (typeof e === 'object' && e !== null && 'icon' in e) ? e : _parseScanError(e)
   showScanState('error')
-  const el = document.getElementById('scan-err-msg')
-  if (el) el.textContent = msg
+  const icon = document.getElementById('scan-err-icon')
+  const msg  = document.getElementById('scan-err-msg')
+  const acts = document.getElementById('scan-err-actions')
+  if (icon) icon.textContent = parsed.icon
+  if (msg)  msg.textContent  = parsed.msg
+  if (acts) acts.innerHTML   = parsed.actions
+    .map(a => `<button class="btn-ghost" onclick="${a.fn}" style="width:100%;font-size:0.8rem">${a.label}</button>`)
+    .join('')
 }
 
 // ═══════════════════════════════════════════════════
