@@ -403,8 +403,8 @@ body > * { position: relative; z-index: 1; }
 .filter-panel-divider { grid-column: 1 / -1; height: 1px; background: var(--border-subtle); margin: -0.25rem 0; }
 
 .examples { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid var(--border-subtle); }
-/* Remove double-line when filter panel is open directly above examples */
-.filter-panel.open + .examples { border-top: none; padding-top: 0.25rem; }
+/* Filter rows sit above examples — keep top border on examples */
+.type-filter-rows { margin-top: 0.55rem; }
 .example-label { font-size: 0.7rem; color: var(--text-secondary); font-family: var(--font-mono); margin-right: 0.2rem; }
 .chip {
   display: flex; align-items: center; gap: 0.3rem; padding: 0.25rem 0.7rem;
@@ -1174,76 +1174,51 @@ footer {
             autocomplete="off" autocorrect="off" spellcheck="false">
           <button class="btn-gold search-btn" id="search-btn" onclick="doSearchImmediate()">→</button>
         </div>
-        <!-- ── Filter bar ── -->
-        <div class="filter-bar">
-          <button class="filter-toggle-btn" id="filter-toggle-btn" onclick="toggleFilterPanel()">
-            <svg width="12" height="10" viewBox="0 0 12 10" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <line x1="0" y1="2" x2="12" y2="2" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
-              <line x1="0" y1="8" x2="12" y2="8" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
-              <circle cx="3.5" cy="2" r="1.8" fill="var(--bg,#eee)" stroke="currentColor" stroke-width="1.3"/>
-              <circle cx="8.5" cy="8" r="1.8" fill="var(--bg,#eee)" stroke="currentColor" stroke-width="1.3"/>
-            </svg>
-            Filters
-            <span class="filter-count hidden" id="filter-count">0</span>
-          </button>
-          <div class="active-filter-pills" id="active-filter-pills"></div>
-        </div>
+        <!-- ── Filters (always visible) ── -->
+        <div class="type-filter-rows" id="type-filter-rows">
 
-        <!-- Filter panel (hidden by default) -->
-        <div class="filter-panel" id="filter-panel">
-          <div class="filter-inner">
-
-            <!-- Game -->
-            <div>
-              <div class="filter-group-label">Game</div>
-              <div class="filter-chips">
-                <button class="fchip active" data-filter="game" data-val="all"    onclick="setGameFilter('all')">All</button>
-                <button class="fchip"        data-filter="game" data-val="tcg"    onclick="setGameFilter('tcg')">TCG</button>
-                <button class="fchip"        data-filter="game" data-val="pocket" onclick="setGameFilter('pocket')">Pocket</button>
-              </div>
-            </div>
-
-            <!-- Card Type -->
-            <div>
-              <div class="filter-group-label">Card Type</div>
-              <div class="filter-chips">
-                <button class="fchip active" data-filter="cat" data-val="all"     onclick="setCategoryFilter('all')">All</button>
-                <button class="fchip"        data-filter="cat" data-val="Pokemon" onclick="setCategoryFilter('Pokemon')">Pokémon</button>
-                <button class="fchip"        data-filter="cat" data-val="Trainer" onclick="setCategoryFilter('Trainer')">Trainer</button>
-                <button class="fchip"        data-filter="cat" data-val="Energy"  onclick="setCategoryFilter('Energy')">Energy</button>
-              </div>
-            </div>
-
-            <!-- Sub-filter (contextual — appears only when a card type is selected) -->
-            <div id="subfilter-row" class="hidden" style="grid-column:1/-1">
-              <div class="filter-group-label" id="subfilter-label">Sub-type</div>
-              <div class="filter-chips" id="subfilter-chips"></div>
-            </div>
-
-            <div class="filter-panel-divider"></div>
-
-            <!-- Energy Type -->
-            <div style="grid-column:1/-1">
-              <div class="filter-group-label">Energy Type <span style="opacity:0.55;font-size:0.52rem">(multi-select)</span></div>
-              <div class="filter-chips" id="filter-type-chips"></div>
-            </div>
-
-            <div class="filter-panel-divider"></div>
-
-            <!-- Expansion -->
-            <div style="grid-column:1/-1">
-              <div class="filter-group-label">
-                Expansion
-                <span style="opacity:0.5;font-size:0.52rem;font-weight:400">populated after search</span>
-              </div>
-              <div class="expansion-wrap">
-                <select class="expansion-select" id="expansion-select" onchange="setExpansionFilter(this.value)">
-                  <option value="all">All Expansions</option>
-                </select>
-              </div>
-            </div>
-
+          <!-- Game -->
+          <div class="scan-filter-row">
+            <span class="scan-filter-label">Game</span>
+            <button class="scan-chip active" data-filter="game" data-val="all"    onclick="setGameFilter('all')">All</button>
+            <button class="scan-chip"        data-filter="game" data-val="tcg"    onclick="setGameFilter('tcg')">TCG</button>
+            <button class="scan-chip"        data-filter="game" data-val="pocket" onclick="setGameFilter('pocket')">Pocket</button>
           </div>
+
+          <!-- Card Type -->
+          <div class="scan-filter-row">
+            <span class="scan-filter-label">Type</span>
+            <button class="scan-chip active" data-filter="cat" data-val="all"     onclick="setCategoryFilter('all')">All</button>
+            <button class="scan-chip"        data-filter="cat" data-val="Pokemon" onclick="setCategoryFilter('Pokemon')">Pokémon</button>
+            <button class="scan-chip"        data-filter="cat" data-val="Trainer" onclick="setCategoryFilter('Trainer')">Trainer</button>
+            <button class="scan-chip"        data-filter="cat" data-val="Energy"  onclick="setCategoryFilter('Energy')">Energy</button>
+          </div>
+
+          <!-- Sub-filter (contextual) -->
+          <div id="subfilter-row" class="scan-filter-row" style="display:none">
+            <span class="scan-filter-label" id="subfilter-label">Sub-type</span>
+            <div class="scan-types-row" id="subfilter-chips"></div>
+          </div>
+
+          <!-- Energy Type (multi-select circular icons) -->
+          <div class="scan-filter-row" style="align-items:flex-start">
+            <span class="scan-filter-label" style="padding-top:0.35rem">
+              Energy<br>
+              <span style="font-size:0.58rem;font-weight:400;text-transform:none;letter-spacing:0;opacity:0.6">multi-select</span>
+            </span>
+            <div class="scan-types-row" id="filter-type-chips"></div>
+          </div>
+
+          <!-- Expansion -->
+          <div class="scan-filter-row">
+            <span class="scan-filter-label">Set</span>
+            <div class="expansion-wrap" style="flex:1;max-width:220px">
+              <select class="expansion-select" id="expansion-select" onchange="setExpansionFilter(this.value)">
+                <option value="all">All Expansions</option>
+              </select>
+            </div>
+          </div>
+
         </div>
 
         <div class="examples">
@@ -1925,35 +1900,8 @@ function countActiveFilters() {
          (filters.expansion !== 'all' ? 1 : 0)
 }
 
-// Rebuild the active-filter summary pills
-// FIX: use explicit onclick strings instead of closure.toString() so X buttons work
-function updateFilterUI() {
-  const n     = countActiveFilters()
-  const badge = document.getElementById('filter-count')
-  const btn   = document.getElementById('filter-toggle-btn')
-  const pills = document.getElementById('active-filter-pills')
-  badge.textContent = n
-  badge.classList.toggle('hidden', n === 0)
-  btn.classList.toggle('has-active', n > 0)
-
-  const parts = []
-  if (filters.game !== 'all')
-    parts.push({ label: filters.game === 'pocket' ? 'Pocket' : 'TCG', clear: `setGameFilter('all')` })
-  if (filters.category !== 'all')
-    parts.push({ label: filters.category, clear: `setCategoryFilter('all')` })
-  if (filters.subfilter !== 'all')
-    parts.push({ label: filters.subfilter, clear: `setSubfilter('all')` })
-  filters.types.forEach(t =>
-    parts.push({ label: t, clear: `toggleTypeFilter('${t}')` }))
-  if (filters.expansion !== 'all') {
-    const sel  = document.getElementById('expansion-select')
-    const name = sel?.options[sel.selectedIndex]?.text || filters.expansion
-    parts.push({ label: name, clear: `setExpansionFilter('all')` })
-  }
-  pills.innerHTML = parts.map(p =>
-    `<span class="active-pill">${escHtml(p.label)}<button onclick="${escAtt(p.clear)}">✕</button></span>`
-  ).join('')
-}
+// Filters are always visible — no pills bar needed
+function updateFilterUI() { /* no-op: filter rows are always visible */ }
 
 // ── Sub-filter definitions per card type ─────────────
 function getSubfilterOptions(category) {
@@ -1982,22 +1930,19 @@ function updateSubfilterRow() {
   const chips = document.getElementById('subfilter-chips')
   const lbl   = document.getElementById('subfilter-label')
   const opts  = getSubfilterOptions(filters.category)
-  if (!opts) { row?.classList.add('hidden'); return }
+  if (!opts) { if (row) row.style.display = 'none'; return }
 
-  const labelMap = { Pokemon: 'Pokémon Sub-type', Trainer: 'Trainer Type', Energy: 'Energy Type' }
+  const labelMap = { Pokemon: 'Stage', Trainer: 'Kind', Energy: 'Kind' }
   lbl.textContent = labelMap[filters.category] || 'Sub-type'
   chips.innerHTML = opts.map(o =>
-    `<button class="fchip${filters.subfilter===o.val?' active':''}"
+    `<button class="scan-chip${filters.subfilter===o.val?' active':''}"
        data-filter="sub" data-val="${o.val}" onclick="setSubfilter('${o.val}')">${o.label}</button>`
   ).join('')
-  row.classList.remove('hidden')
+  if (row) row.style.display = ''
 }
 
 // ── Filter setters ──────────────────────────────────
-function toggleFilterPanel() {
-  filterPanelOpen = !filterPanelOpen
-  document.getElementById('filter-panel').classList.toggle('open', filterPanelOpen)
-}
+function toggleFilterPanel() { /* filters are always visible now */ }
 
 function setGameFilter(val) {
   filters.game = val
@@ -2047,15 +1992,13 @@ function setExpansionFilter(val) {
   updateFilterUI(); reapplyClientFilters()
 }
 
-// Build the energy type chips (called once on load)
+// Build the energy type chips (called once on load) — circular scan-chip-type icons
 function initTypeFilterChips() {
   const TYPES = ['Grass','Fire','Water','Lightning','Psychic','Fighting','Darkness','Metal','Dragon','Fairy','Colorless']
   const container = document.getElementById('filter-type-chips')
   if (!container) return
   container.innerHTML = TYPES.map(t =>
-    `<button class="fchip type-chip" data-filter="type" data-val="${t}" onclick="toggleTypeFilter('${t}')" title="${t}">
-      ${_typeIcon(t, 16)}<span style="font-size:0.62rem">${t}</span>
-    </button>`
+    `<button class="scan-chip-type${filters.types.has(t)?' active':''}" data-filter="type" data-val="${t}" onclick="toggleTypeFilter('${t}')" title="${t}">${_typeIcon(t, 18)}</button>`
   ).join('')
 }
 
