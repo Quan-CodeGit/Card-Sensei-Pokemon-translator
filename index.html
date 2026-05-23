@@ -400,6 +400,8 @@ body > * { position: relative; z-index: 1; }
 .expansion-select:focus { outline: none; border-color: var(--red); box-shadow: 0 0 0 2px rgba(215,35,35,0.1); }
 .expansion-select.has-val { border-color: var(--dark); background-color: var(--dark); color: #fff;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23ffffff'/%3E%3C/svg%3E"); }
+.expansion-select optgroup { font-size: 0.62rem; font-weight: 700; letter-spacing: 0.06em; color: var(--text-secondary); background: var(--surface-alt); }
+.expansion-select option { font-size: 0.68rem; color: var(--text-primary); font-weight: 400; }
 .filter-panel-divider { grid-column: 1 / -1; height: 1px; background: var(--border-subtle); margin: -0.25rem 0; }
 
 .examples { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid var(--border-subtle); }
@@ -1203,12 +1205,12 @@ footer {
             <div class="scan-types-row" id="filter-type-chips"></div>
           </div>
 
-          <!-- Expansion -->
+          <!-- Set / Expansion -->
           <div class="scan-filter-row">
             <span class="scan-filter-label">Set</span>
-            <div class="expansion-wrap" style="flex:1;max-width:220px">
+            <div class="expansion-wrap" style="flex:1;max-width:260px">
               <select class="expansion-select" id="expansion-select" onchange="setExpansionFilter(this.value)">
-                <option value="all">All Expansions</option>
+                <option value="all">All Sets</option>
               </select>
             </div>
           </div>
@@ -1709,7 +1711,6 @@ async function renderSearchResult(query, merged) {
   clearError()
   hide('empty-state'); hide('no-results'); hide('results-section'); hide('skeleton-section')
   lastSearchResults = merged            // save for client-side re-filtering
-  updateExpansionDropdown(merged)       // populate expansion <select>
   let visible = applyClientFilters(merged)
 
   // Only Trainer subtypes need per-card detail fetch (suffix field).
@@ -1869,11 +1870,11 @@ function updateExpansionDropdown(cards) {
   sel.classList.toggle('has-val', prev !== 'all')
 }
 
-// Re-render with client-side filters; trigger API fetch if no results yet and query exists
+// Re-render with client-side filters; trigger API fetch if no results yet and query/filter exists
 async function reapplyClientFilters() {
   const q = document.getElementById('search-input').value.trim()
   if (!lastSearchResults.length) {
-    // Energy browse: auto-fetch all Energy cards even with no query
+    if (filters.expansion !== 'all' && !q) { doSetBrowse(filters.expansion); return }
     if (q || filters.category === 'Energy') { clearTimeout(debounceTimer); doSearch(q) }
     return
   }
@@ -2015,7 +2016,101 @@ function setExpansionFilter(val) {
   filters.expansion = val
   const sel = document.getElementById('expansion-select')
   if (sel) { sel.value = val; sel.classList.toggle('has-val', val !== 'all') }
-  updateFilterUI(); reapplyClientFilters()
+  updateFilterUI()
+  const q = document.getElementById('search-input').value.trim()
+  if (val !== 'all' && !q) {
+    // No search query — browse all cards in the selected set
+    doSetBrowse(val)
+  } else if (val === 'all' && !q && !lastSearchResults.length) {
+    showEmpty()
+  } else {
+    reapplyClientFilters()
+  }
+}
+
+// ── All-sets browser ─────────────────────────────────────────────────────────
+// Fetch all sets once on load; populate the expansion <select> with optgroups
+
+const SERIES_ORDER = [
+  'TCG Pocket', 'Scarlet & Violet', 'Sword & Shield', 'Sun & Moon', 'XY',
+  'Black & White', 'HeartGold & SoulSilver', 'Platinum', 'Diamond & Pearl',
+  'EX', 'E-Card', 'Legendary Collection', 'Neo', 'Gym', 'Base', 'Other'
+]
+
+function inferSeries(id) {
+  const lo = id.toLowerCase()
+  if (/^(a\d|b\d|promo-a)/i.test(id)) return 'TCG Pocket'
+  if (lo.startsWith('sv'))    return 'Scarlet & Violet'
+  if (lo.startsWith('swsh'))  return 'Sword & Shield'
+  if (lo.startsWith('sm'))    return 'Sun & Moon'
+  if (lo.startsWith('xy'))    return 'XY'
+  if (lo.startsWith('bw') || lo.startsWith('mc')) return 'Black & White'
+  if (lo.startsWith('hgss') || lo === 'col')      return 'HeartGold & SoulSilver'
+  if (lo.startsWith('pl'))    return 'Platinum'
+  if (lo.startsWith('dp'))    return 'Diamond & Pearl'
+  if (lo.startsWith('ex'))    return 'EX'
+  if (lo.startsWith('ecard')) return 'E-Card'
+  if (lo.startsWith('lc'))    return 'Legendary Collection'
+  if (lo.startsWith('neo'))   return 'Neo'
+  if (lo.startsWith('gym'))   return 'Gym'
+  if (lo.startsWith('base') || lo.startsWith('wp')) return 'Base'
+  return 'Other'
+}
+
+let _allSets = null   // [{id, name, series}] — cached after first fetch
+
+async function initAllSets() {
+  try {
+    const raw = await fetchTimed('https://api.tcgdex.net/v2/en/sets')
+    if (!Array.isArray(raw)) return
+    _allSets = raw.map(s => ({ id: s.id, name: s.name, series: inferSeries(s.id) }))
+    _buildSetDropdown()
+  } catch { /* silent — sets will just be empty */ }
+}
+
+function _buildSetDropdown() {
+  const sel = document.getElementById('expansion-select')
+  if (!sel || !_allSets) return
+
+  // Group by series
+  const groups = {}
+  _allSets.forEach(s => { (groups[s.series] ??= []).push(s) })
+
+  let html = '<option value="all">All Sets</option>'
+  for (const series of SERIES_ORDER) {
+    const sets = groups[series]
+    if (!sets?.length) continue
+    html += `<optgroup label="${escHtml(series)}">`
+    // Reverse so newest sets in each series appear first
+    html += [...sets].reverse().map(s =>
+      `<option value="${escHtml(s.id)}"${s.id === filters.expansion ? ' selected' : ''}>${escHtml(s.name)}</option>`
+    ).join('')
+    html += '</optgroup>'
+  }
+  sel.innerHTML = html
+  sel.classList.toggle('has-val', filters.expansion !== 'all')
+}
+
+async function doSetBrowse(setId) {
+  const cacheKey = '__set__' + setId
+  clearError()
+  hide('empty-state'); hide('no-results'); hide('results-section'); hide('skeleton-section')
+
+  const cached = searchCache.get(cacheKey)
+  if (cached) { renderSearchResult('', cached); return }
+
+  showSkeleton(true)
+  try {
+    const setData = await fetchTimed(`https://api.tcgdex.net/v2/en/sets/${setId}`)
+    if (!setData || Array.isArray(setData) || !setData.cards) throw new Error('Set not found')
+    // Inject set info so expansion client-filter works correctly
+    const cards = setData.cards.map(c => ({ ...c, set: { id: setData.id, name: setData.name } }))
+    searchCache.set(cacheKey, cards)
+    renderSearchResult('', cards)
+  } catch (e) {
+    showSkeleton(false)
+    showError(e.message || 'Failed to load set cards. Check your connection.')
+  }
 }
 
 // Build the energy type chips (called once on load) — circular scan-chip-type icons
@@ -4070,6 +4165,7 @@ syncDeck()
 renderDeckPanel()
 checkShareHash()
 initTypeFilterChips()   // build energy type filter chips using real SVG icons
+initAllSets()           // fetch all 230+ sets and populate expansion dropdown with optgroups
 document.getElementById('search-input').focus()
 
 // Prefetch example chips — only runs ONCE, triggered by first user interaction.
