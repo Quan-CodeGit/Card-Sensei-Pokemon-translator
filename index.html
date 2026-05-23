@@ -2032,7 +2032,7 @@ function setExpansionFilter(val) {
 // Fetch all sets once on load; populate the expansion <select> with optgroups
 
 const SERIES_ORDER = [
-  'TCG Pocket', 'Scarlet & Violet', 'Sword & Shield', 'Sun & Moon', 'XY',
+  'TCG Pocket', 'Mega Evolution', 'Scarlet & Violet', 'Sword & Shield', 'Sun & Moon', 'XY',
   'Black & White', 'HeartGold & SoulSilver', 'Platinum', 'Diamond & Pearl',
   'EX', 'E-Card', 'Legendary Collection', 'Neo', 'Gym', 'Base', 'Other'
 ]
@@ -2040,14 +2040,17 @@ const SERIES_ORDER = [
 function inferSeries(id) {
   const lo = id.toLowerCase()
   if (/^(a\d|b\d|promo-a)/i.test(id)) return 'TCG Pocket'
+  if (lo.startsWith('me'))    return 'Mega Evolution'
   if (lo.startsWith('sv'))    return 'Scarlet & Violet'
   if (lo.startsWith('swsh'))  return 'Sword & Shield'
-  if (lo.startsWith('sm'))    return 'Sun & Moon'
+  if (lo.startsWith('sm') && !lo.startsWith('sma')) return 'Sun & Moon'
+  if (lo.startsWith('sma'))   return 'Sun & Moon'
   if (lo.startsWith('xy'))    return 'XY'
   if (lo.startsWith('bw') || lo.startsWith('mc')) return 'Black & White'
   if (lo.startsWith('hgss') || lo === 'col')      return 'HeartGold & SoulSilver'
   if (lo.startsWith('pl'))    return 'Platinum'
   if (lo.startsWith('dp'))    return 'Diamond & Pearl'
+  if (lo.startsWith('pop') || lo.startsWith('tk')) return 'Diamond & Pearl'
   if (lo.startsWith('ex'))    return 'EX'
   if (lo.startsWith('ecard')) return 'E-Card'
   if (lo.startsWith('lc'))    return 'Legendary Collection'
@@ -2068,6 +2071,22 @@ async function initAllSets() {
   } catch { /* silent — sets will just be empty */ }
 }
 
+/** Numeric sort key for a set ID: sv03.5 → [3,5,0], sv10.5b → [10,5,2], A1a → [1,0,1], basep → [9999,0,0] */
+function _setOrder(id) {
+  const m = id.match(/(\d+)(?:\.(\d+))?([a-z])?$/i)
+  if (!m) return [9999, 0, 0]    // unnumbered (promos, etc.) → end of group
+  return [
+    parseInt(m[1]),
+    m[2] ? parseInt(m[2]) : 0,
+    m[3] ? m[3].toLowerCase().charCodeAt(0) - 96 : 0   // a=1, b=2 …
+  ]
+}
+
+function _cmpSetOrder(a, b) {
+  const ka = _setOrder(a.id), kb = _setOrder(b.id)
+  return ka[0] - kb[0] || ka[1] - kb[1] || ka[2] - kb[2]
+}
+
 function _buildSetDropdown() {
   const sel = document.getElementById('expansion-select')
   if (!sel || !_allSets) return
@@ -2080,9 +2099,10 @@ function _buildSetDropdown() {
   for (const series of SERIES_ORDER) {
     const sets = groups[series]
     if (!sets?.length) continue
+    // Sort ascending by numeric set ID: sv01 < sv02 < sv03 < sv03.5 ... sv10.5w
+    const sorted = [...sets].sort(_cmpSetOrder)
     html += `<optgroup label="${escHtml(series)}">`
-    // Reverse so newest sets in each series appear first
-    html += [...sets].reverse().map(s =>
+    html += sorted.map(s =>
       `<option value="${escHtml(s.id)}"${s.id === filters.expansion ? ' selected' : ''}>${escHtml(s.name)}</option>`
     ).join('')
     html += '</optgroup>'
