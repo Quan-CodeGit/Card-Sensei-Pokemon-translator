@@ -1743,7 +1743,8 @@ let filterPanelOpen   = false
 let lastSearchResults = []  // full unfiltered results from last API call
 
 // Detect TCG Pocket cards — their set IDs start with A (A1, A1a, A2…) or PROMO-A
-function isPocketCard(c) { return /^A\d|^PROMO-A/i.test(c.set?.id || '') }
+// Uses inferSeries so any future Pocket sets (B*, C*, …) are detected automatically
+function isPocketCard(c) { return inferSeries(c.set?.id || '') === 'TCG Pocket' }
 
 // Rule Box Pokémon detection by name suffix (client-side)
 const RULE_BOX_RE = /\b(ex|EX|GX|V|VMAX|VSTAR|V-UNION|LEGEND|e\+)\s*$/
