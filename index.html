@@ -1250,8 +1250,8 @@ footer {
               <span class="scan-filter-label">Stage</span>
               <button class="scan-chip active" data-subval="all"     onclick="setScanSubfilter('all')">All</button>
               <button class="scan-chip"        data-subval="Basic"   onclick="setScanSubfilter('Basic')">Basic</button>
-              <button class="scan-chip"        data-subval="Stage 1" onclick="setScanSubfilter('Stage 1')">Stage 1</button>
-              <button class="scan-chip"        data-subval="Stage 2" onclick="setScanSubfilter('Stage 2')">Stage 2</button>
+              <button class="scan-chip"        data-subval="Stage1" onclick="setScanSubfilter('Stage1')">Stage 1</button>
+              <button class="scan-chip"        data-subval="Stage2" onclick="setScanSubfilter('Stage2')">Stage 2</button>
             </div>
             <!-- Pokémon rule box subfilter -->
             <div id="scan-sub-pokemon-rulebox" class="scan-filter-row" style="display:none">
@@ -1735,7 +1735,7 @@ const filters = {
   types:        new Set(), // Set of energy type strings (single-select)
   category:     'all',   // 'all' | 'Pokemon' | 'Trainer' | 'Energy'
   subfilter:    'all',   // Pokémon: rulebox filter; Trainer: kind; Energy: kind
-  pokemonStage: 'all',   // Pokémon only: 'all' | 'Basic' | 'Stage 1' | 'Stage 2'
+  pokemonStage: 'all',   // Pokémon only: 'all' | 'Basic' | 'Stage1' | 'Stage2' (TCGdex format)
   expansion:    'all',   // 'all' | set.id string
 }
 let filterPanelOpen   = false
@@ -1940,7 +1940,7 @@ function updateSubfilterRow() {
     // Two independent rows: Stage + Rule Box
     const stageChips = [
       {val:'all',label:'All'},{val:'Basic',label:'Basic'},
-      {val:'Stage 1',label:'Stage 1'},{val:'Stage 2',label:'Stage 2'},
+      {val:'Stage1',label:'Stage 1'},{val:'Stage2',label:'Stage 2'},
     ].map(o => _chip('stage', o.val, o.label, filters.pokemonStage)).join('')
     const ruleChips = [
       {val:'all',label:'All'},{val:'normal',label:'Normal'},{val:'rulebox',label:'⭐ Rule Box'},
@@ -3069,8 +3069,9 @@ async function readCardWithAI(canvas) {
     const nameDataURL = _nameRegionDataURL(canvas)           // 2× upscaled name strip
 
     // Build filter hints from user's manual selections
+    const stageLabel = {'Stage1':'Stage 1','Stage2':'Stage 2'}
     const subHint = scanFilters.subfilter !== 'all'
-      ? `\nThe user identified this Pokémon as stage: "${scanFilters.subfilter}".`
+      ? `\nThe user identified this Pokémon as stage: "${stageLabel[scanFilters.subfilter] || scanFilters.subfilter}".`
       : ''
     const ruleboxHint = scanFilters.pokemonRulebox !== 'all'
       ? `\nThe user identified this Pokémon as ${scanFilters.pokemonRulebox === 'rulebox' ? 'a Rule Box card (ex/GX/V/VMAX/VSTAR/Mega/etc.)' : 'a Normal Pokémon (no Rule Box)'}.`
