@@ -1742,9 +1742,19 @@ const filters = {
 let filterPanelOpen   = false
 let lastSearchResults = []  // full unfiltered results from last API call
 
-// Detect TCG Pocket cards — their set IDs start with A (A1, A1a, A2…) or PROMO-A
-// Uses inferSeries so any future Pocket sets (B*, C*, …) are detected automatically
-function isPocketCard(c) { return inferSeries(c.set?.id || '') === 'TCG Pocket' }
+// Extract the set ID from a card object.
+// The list API doesn't include a `set` object — the set ID is the prefix before the last '-'
+// in the card's own id field: "A1-089" → "A1", "sv07-041" → "sv07", "pl4-1" → "pl4"
+// doSetBrowse() injects `set.id` explicitly, so that path keeps working too.
+function cardSetId(c) {
+  if (c.set?.id) return c.set.id
+  const id = c.id || ''
+  const dash = id.lastIndexOf('-')
+  return dash > 0 ? id.slice(0, dash) : id
+}
+
+// Detect TCG Pocket cards — uses inferSeries so any future Pocket sets auto-detected
+function isPocketCard(c) { return inferSeries(cardSetId(c)) === 'TCG Pocket' }
 
 // Rule Box Pokémon detection by name suffix (client-side)
 const RULE_BOX_RE = /\b(ex|EX|GX|V|VMAX|VSTAR|V-UNION|LEGEND|e\+)\s*$/
@@ -1778,7 +1788,7 @@ function applyClientFilters(cards) {
       if (filters.game === 'pocket' && !pocket) return false
       if (filters.game === 'tcg'    &&  pocket) return false
     }
-    if (filters.expansion !== 'all' && (c.set?.id || '') !== filters.expansion) return false
+    if (filters.expansion !== 'all' && cardSetId(c) !== filters.expansion) return false
     // Pokémon Rule Box sub-filter — client-side name-based detection
     if (filters.category === 'Pokemon' && filters.subfilter !== 'all') {
       const rb = isRuleBoxCard(c.name)
