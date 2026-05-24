@@ -4221,39 +4221,53 @@ async function downloadDeckPng() {
   if (!deck?.cards.length) return
   showToast('⏳ Generating image…')
 
-  const COLS = 5, CW = 130, CH = 182, GAP = 10, PAD = 16, HEADER_H = 68, NAME_H = 16
+  // 3× scale → crisp on phone retina screens
+  const SCALE = 3
+  const COLS = 5, CW = 140, CH = 196, GAP = 12, PAD = 18, HEADER_H = 74, NAME_H = 20
   const cards = [...deck.cards].sort((a, b) => a.card.name.localeCompare(b.card.name))
   const total = cards.reduce((s, e) => s + e.qty, 0)
   const rows = Math.ceil(cards.length / COLS)
+  // Logical (CSS) dimensions
   const W = PAD * 2 + COLS * (CW + GAP) - GAP
   const H = HEADER_H + PAD + rows * (CH + GAP + NAME_H) + PAD
 
   const canvas = document.createElement('canvas')
-  canvas.width = W; canvas.height = H
+  // Physical pixel dimensions = logical × SCALE
+  canvas.width  = W * SCALE
+  canvas.height = H * SCALE
   const ctx = canvas.getContext('2d')
+  ctx.scale(SCALE, SCALE)   // all drawing uses logical coords from here on
+  ctx.imageSmoothingEnabled = true
+  ctx.imageSmoothingQuality = 'high'
 
-  // Background
+  // Background gradient
   const bg = ctx.createLinearGradient(0, 0, 0, H)
   bg.addColorStop(0, '#1a1a2e'); bg.addColorStop(1, '#0d1b2a')
   ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H)
 
   // Header bar
   ctx.fillStyle = '#d72323'; ctx.fillRect(0, 0, W, HEADER_H)
-  // Pokéball circle decoration
-  ctx.fillStyle = 'rgba(0,0,0,0.15)'; ctx.beginPath(); ctx.arc(W - 36, HEADER_H / 2, 40, 0, Math.PI * 2); ctx.fill()
-  ctx.fillStyle = 'rgba(255,255,255,0.08)'; ctx.beginPath(); ctx.arc(W - 36, HEADER_H / 2, 28, 0, Math.PI * 2); ctx.fill()
-  // Deck title
-  ctx.fillStyle = '#fff'; ctx.font = 'bold 22px system-ui,sans-serif'
-  ctx.fillText(deck.name, PAD, 36)
-  ctx.fillStyle = 'rgba(255,255,255,0.7)'; ctx.font = '12px system-ui,sans-serif'
-  ctx.fillText(`${total} cards  ·  Card Sensei`, PAD, 56)
+  // Pokéball decoration
+  ctx.fillStyle = 'rgba(0,0,0,0.15)'; ctx.beginPath(); ctx.arc(W - 40, HEADER_H / 2, 46, 0, Math.PI * 2); ctx.fill()
+  ctx.fillStyle = 'rgba(255,255,255,0.08)'; ctx.beginPath(); ctx.arc(W - 40, HEADER_H / 2, 30, 0, Math.PI * 2); ctx.fill()
+  // Title
+  ctx.fillStyle = '#fff'; ctx.font = 'bold 24px system-ui,sans-serif'
+  ctx.fillText(deck.name, PAD, 38)
+  ctx.fillStyle = 'rgba(255,255,255,0.72)'; ctx.font = '13px system-ui,sans-serif'
+  ctx.fillText(`${total} cards  ·  Card Sensei`, PAD, 60)
 
-  // Load images concurrently with CORS
+  // Load high-quality images concurrently with CORS
   const loaded = await Promise.all(cards.map(entry => new Promise(res => {
     const img = new Image(); img.crossOrigin = 'anonymous'
     img.onload  = () => res({ img, entry })
-    img.onerror = () => res({ img: null, entry })
-    img.src = (entry.card.image || '') + '/low.webp'
+    img.onerror = () => {
+      // Fallback: try low quality
+      const img2 = new Image(); img2.crossOrigin = 'anonymous'
+      img2.onload  = () => res({ img: img2, entry })
+      img2.onerror = () => res({ img: null, entry })
+      img2.src = (entry.card.image || '') + '/low.webp'
+    }
+    img.src = (entry.card.image || '') + '/high.webp'
   })))
 
   // Draw cards
@@ -4262,48 +4276,46 @@ async function downloadDeckPng() {
     const x = PAD + col * (CW + GAP)
     const y = HEADER_H + PAD + row * (CH + GAP + NAME_H)
 
-    // Card rounded clip
+    // Card with rounded corners
     ctx.save()
-    _rrPath(ctx, x, y, CW, CH, 7); ctx.clip()
+    _rrPath(ctx, x, y, CW, CH, 8); ctx.clip()
     if (img) {
       ctx.drawImage(img, x, y, CW, CH)
     } else {
-      // Stylised placeholder
       ctx.fillStyle = '#1e3a5f'; ctx.fillRect(x, y, CW, CH)
-      ctx.fillStyle = 'rgba(255,255,255,0.12)'
-      ctx.fillRect(x, y + CH * 0.55, CW, CH * 0.45)
-      ctx.fillStyle = 'rgba(255,255,255,0.5)'; ctx.font = '9px system-ui,sans-serif'
-      ctx.textAlign = 'center'
-      // Word-wrap name inside placeholder
+      ctx.fillStyle = 'rgba(255,255,255,0.12)'; ctx.fillRect(x, y + CH * 0.55, CW, CH * 0.45)
+      ctx.fillStyle = 'rgba(255,255,255,0.5)'; ctx.font = '10px system-ui,sans-serif'; ctx.textAlign = 'center'
       const words = entry.card.name.split(' ')
       let line = '', ly = y + CH / 2 - 6
       words.forEach(w => {
         const test = line ? line + ' ' + w : w
-        if (ctx.measureText(test).width > CW - 12) { ctx.fillText(line, x + CW / 2, ly); line = w; ly += 13 }
+        if (ctx.measureText(test).width > CW - 14) { ctx.fillText(line, x + CW / 2, ly); line = w; ly += 14 }
         else line = test
       })
-      ctx.fillText(line, x + CW / 2, ly)
-      ctx.textAlign = 'left'
+      ctx.fillText(line, x + CW / 2, ly); ctx.textAlign = 'left'
     }
     ctx.restore()
 
-    // Quantity badge (always shown)
-    const bx = x + CW - 13, by = y + 13
-    ctx.fillStyle = 'rgba(0,0,0,0.45)'; ctx.beginPath(); ctx.arc(bx, by, 13, 0, Math.PI * 2); ctx.fill()
-    ctx.fillStyle = entry.qty > 1 ? '#fbbf24' : 'rgba(255,255,255,0.65)'
-    ctx.font = `bold 10px system-ui,sans-serif`; ctx.textAlign = 'center'
+    // Quantity badge — top-right corner, always shown
+    const BR = 15   // badge radius
+    const bx = x + CW - BR, by = y + BR
+    // Shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.beginPath(); ctx.arc(bx, by, BR + 1, 0, Math.PI * 2); ctx.fill()
+    // Badge colour: yellow for >1, white-tinted for ×1
+    ctx.fillStyle = entry.qty > 1 ? '#f59e0b' : '#e5e7eb'
+    ctx.beginPath(); ctx.arc(bx, by, BR, 0, Math.PI * 2); ctx.fill()
+    ctx.fillStyle = entry.qty > 1 ? '#1a1a1a' : '#374151'
+    ctx.font = `bold 11px system-ui,sans-serif`; ctx.textAlign = 'center'
     ctx.fillText('×' + entry.qty, bx, by + 4); ctx.textAlign = 'left'
 
-    // Card name label below
-    ctx.fillStyle = 'rgba(255,255,255,0.78)'; ctx.font = '8.5px system-ui,sans-serif'
-    ctx.textAlign = 'center'
+    // Card name below
+    ctx.fillStyle = 'rgba(255,255,255,0.82)'; ctx.font = '9.5px system-ui,sans-serif'; ctx.textAlign = 'center'
     let nm = entry.card.name
     while (ctx.measureText(nm).width > CW - 4 && nm.length > 2) nm = nm.slice(0, -1)
     if (nm !== entry.card.name) nm += '…'
-    ctx.fillText(nm, x + CW / 2, y + CH + 12); ctx.textAlign = 'left'
+    ctx.fillText(nm, x + CW / 2, y + CH + 14); ctx.textAlign = 'left'
   })
 
-  // Try to download (may fail if any image blocked CORS)
   try {
     const a = document.createElement('a')
     a.download = deck.name.replace(/[^a-z0-9 _-]/gi, '').trim().replace(/\s+/g, '_') + '_deck.png'
@@ -4311,7 +4323,7 @@ async function downloadDeckPng() {
     a.click()
     showToast('🖼️ Image downloaded!')
   } catch {
-    showToast('⚠️ CORS blocked image export — try PDF instead')
+    showToast('⚠️ Image blocked by CORS — try PDF instead')
   }
 }
 
@@ -4322,34 +4334,52 @@ function downloadDeckPdf() {
   const total = deck.cards.reduce((s, e) => s + e.qty, 0)
   const sorted = [...deck.cards].sort((a, b) => a.card.name.localeCompare(b.card.name))
 
-  const cardsHtml = sorted.map(e => `
+  const cardsHtml = sorted.map(e => {
+    const qtyBadge = `<div class="qb ${e.qty > 1 ? 'qb-multi' : ''}">×${e.qty}</div>`
+    const setLine  = e.card.set?.name ? `<div class="cs">${escHtml(e.card.set.name)}</div>` : ''
+    return `
     <div class="c">
       <div class="ci">
-        <img src="${escHtml((e.card.image || '') + '/low.webp')}" alt="${escHtml(e.card.name)}" loading="lazy">
-        ${e.qty > 1 ? `<div class="qb">×${e.qty}</div>` : ''}
+        <img src="${escHtml((e.card.image || '') + '/high.webp')}"
+             onerror="this.src='${escHtml((e.card.image || '') + '/low.webp')}'"
+             alt="${escHtml(e.card.name)}" loading="lazy">
+        ${qtyBadge}
       </div>
       <div class="cn">${escHtml(e.card.name)}</div>
-      ${e.card.set?.name ? `<div class="cs">${escHtml(e.card.set.name)}</div>` : ''}
-    </div>`).join('')
+      <div class="cq">×${e.qty} cop${e.qty === 1 ? 'y' : 'ies'}</div>
+      ${setLine}
+    </div>`
+  }).join('')
 
   const html = `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${escHtml(deck.name)} — Card Sensei</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#fff;color:#111;padding:18px}
-.hd{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:14px;padding-bottom:12px;border-bottom:3px solid #d72323}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f8f8f8;color:#111;padding:18px}
+.hd{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:16px;padding-bottom:12px;border-bottom:3px solid #d72323;background:#fff;padding:14px 16px;border-radius:10px;box-shadow:0 1px 4px rgba(0,0,0,0.08)}
 .ht{font-size:22px;font-weight:700;color:#111}.hm{font-size:11px;color:#777;margin-top:3px}
-.pb{background:#d72323;color:#fff;border:none;padding:8px 18px;border-radius:7px;cursor:pointer;font-size:13px;font-weight:600;white-space:nowrap;flex-shrink:0;margin-left:12px}
+.pb{background:#d72323;color:#fff;border:none;padding:9px 20px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:700;white-space:nowrap;flex-shrink:0;margin-left:12px;box-shadow:0 2px 6px rgba(215,35,35,0.35)}
 .pb:hover{background:#b91c1c}
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(108px,1fr));gap:9px}
-.c{display:flex;flex-direction:column;align-items:center}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:12px}
+.c{display:flex;flex-direction:column;align-items:center;background:#fff;border-radius:9px;padding:6px 6px 7px;box-shadow:0 1px 4px rgba(0,0,0,0.08)}
 .ci{position:relative;width:100%}
-.ci img{width:100%;aspect-ratio:63/88;object-fit:cover;border-radius:7px;border:1px solid #ddd;display:block;background:#f0f0f0}
-.qb{position:absolute;top:4px;right:4px;background:#d72323;color:#fff;font-size:10px;font-weight:700;border-radius:50%;width:21px;height:21px;display:flex;align-items:center;justify-content:center}
-.cn{font-size:8.5px;font-weight:600;text-align:center;margin-top:4px;color:#222;width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.cs{font-size:7.5px;color:#999;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;width:100%}
+.ci img{width:100%;aspect-ratio:63/88;object-fit:cover;border-radius:6px;display:block;background:#eee}
+/* Qty badge — top-right corner, always visible */
+.qb{position:absolute;top:5px;right:5px;background:#6b7280;color:#fff;font-size:10px;font-weight:700;border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 3px rgba(0,0,0,0.4)}
+.qb.qb-multi{background:#d72323}
+/* Name + qty text below card */
+.cn{font-size:9px;font-weight:700;text-align:center;margin-top:5px;color:#111;width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cq{display:inline-block;font-size:8px;font-weight:600;color:#d72323;background:#fee2e2;border-radius:20px;padding:1px 7px;margin-top:3px}
+.cs{font-size:7.5px;color:#aaa;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;width:100%;margin-top:2px}
 footer{margin-top:18px;text-align:center;font-size:9px;color:#ccc;border-top:1px solid #eee;padding-top:10px}
-@media print{.pb{display:none!important}body{padding:8px}.grid{gap:6px}}
+@media print{
+  .pb{display:none!important}
+  body{padding:6px;background:#fff}
+  .hd{box-shadow:none;padding:8px 10px}
+  .c{box-shadow:none;border:1px solid #e5e5e5}
+  .grid{gap:7px}
+}
 </style></head><body>
 <div class="hd">
   <div>
