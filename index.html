@@ -871,6 +871,16 @@ footer {
 .share-modal-item-name { flex: 1; font-size: 0.82rem; font-weight: 500; color: var(--text-primary); pointer-events: none; }
 .share-modal-count { font-size: 0.65rem; color: var(--text-secondary); font-family: var(--font-mono); pointer-events: none; }
 .share-modal-footer { display: flex; gap: 0.5rem; justify-content: flex-end; padding-top: 0.1rem; }
+/* Download modal */
+.dl-format-btn {
+  display: flex; flex-direction: column; align-items: center; gap: 0.35rem;
+  padding: 1rem 0.5rem; border-radius: 0.5rem; cursor: pointer; width: 100%;
+  border: 1.5px solid var(--border-mid); background: var(--surface-2);
+  color: var(--text-primary); transition: all 0.15s;
+}
+.dl-format-btn:hover { border-color: var(--red); background: rgba(215,35,35,0.06); }
+.dl-format-btn strong { font-size: 0.82rem; }
+.dl-format-btn span:last-child { font-size: 0.67rem; color: var(--text-secondary); text-align: center; line-height: 1.3; }
 .builder-body { flex: 1; display: flex; overflow: hidden; }
 .builder-left {
   flex: 1; display: flex; flex-direction: column; overflow: hidden;
@@ -1457,6 +1467,7 @@ footer {
           <span class="deck-count" id="deck-count-badge">0/60</span>
           <button onclick="openViewer()" style="font-size:0.58rem;font-family:var(--font-mono);letter-spacing:0.1em;text-transform:uppercase;color:rgba(238,238,238,0.7);padding:0.2rem 0.5rem;border-radius:0.3rem;border:1px solid rgba(238,238,238,0.2);transition:all 0.15s" onmouseover="this.style.borderColor='rgba(215,35,35,0.6)';this.style.color='#fff'" onmouseout="this.style.borderColor='rgba(238,238,238,0.2)';this.style.color='rgba(238,238,238,0.7)'">VIEW →</button>
           <button onclick="openBuilder()" style="font-size:0.58rem;font-family:var(--font-mono);letter-spacing:0.1em;text-transform:uppercase;color:rgba(238,238,238,0.7);padding:0.2rem 0.5rem;border-radius:0.3rem;border:1px solid rgba(238,238,238,0.2);transition:all 0.15s" onmouseover="this.style.borderColor='rgba(215,35,35,0.6)';this.style.color='#fff'" onmouseout="this.style.borderColor='rgba(238,238,238,0.2)';this.style.color='rgba(238,238,238,0.7)'">BUILD →</button>
+          <button onclick="openDownloadModal()" title="Download deck" style="font-size:0.58rem;font-family:var(--font-mono);letter-spacing:0.1em;text-transform:uppercase;color:rgba(238,238,238,0.7);padding:0.2rem 0.5rem;border-radius:0.3rem;border:1px solid rgba(238,238,238,0.2);transition:all 0.15s" onmouseover="this.style.borderColor='rgba(215,35,35,0.6)';this.style.color='#fff'" onmouseout="this.style.borderColor='rgba(238,238,238,0.2)';this.style.color='rgba(238,238,238,0.7)'">⬇</button>
         </div>
       </div>
       <div class="deck-tabs">
@@ -3607,6 +3618,7 @@ function openBuilder() {
       <div class="builder-tabs" id="builder-tabs"></div>
       <button class="builder-tab-add" onclick="createNewDeck()" title="New deck">+ New</button>
       <div style="flex-shrink:0;display:flex;gap:0.5rem;margin-left:0.5rem">
+        <button class="btn-ghost" onclick="openDownloadModal()" style="font-size:0.65rem;padding:0.25rem 0.65rem;border-color:rgba(238,238,238,0.22);color:rgba(238,238,238,0.7)">⬇ Download</button>
         <button class="btn-ghost" onclick="openShareModal()" style="font-size:0.65rem;padding:0.25rem 0.65rem;border-color:rgba(238,238,238,0.22);color:rgba(238,238,238,0.7)">🔗 Share</button>
         <button class="btn-gold" onclick="closeBuilder()" style="font-size:0.65rem;padding:0.25rem 0.65rem">✓ Done</button>
       </div>
@@ -4152,6 +4164,208 @@ async function openViewerCard(cardId, lang) {
 
 function closeViewerCard() {
   document.querySelector('.viewer-trans-overlay')?.remove()
+}
+
+// ═══════════════════════════════════════════════════
+// DOWNLOAD DECK
+// ═══════════════════════════════════════════════════
+function openDownloadModal() {
+  document.getElementById('dl-overlay')?.remove()
+  const deck = getActiveDeck()
+  if (!deck?.cards.length) { showToast('Deck is empty — add cards first'); return }
+  const overlay = document.createElement('div')
+  overlay.id = 'dl-overlay'
+  overlay.className = 'share-overlay'
+  overlay.onclick = e => { if (e.target === overlay) overlay.remove() }
+  const total = deck.cards.reduce((s,e) => s + e.qty, 0)
+  overlay.innerHTML = `
+    <div class="share-modal" onclick="event.stopPropagation()" style="max-width:340px">
+      <div class="share-modal-title">⬇ Download Deck</div>
+      <p style="font-size:0.72rem;color:var(--text-secondary);margin:-0.25rem 0 1.1rem">
+        <strong>${escHtml(deck.name)}</strong> &nbsp;·&nbsp; ${total} cards
+      </p>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem">
+        <button class="dl-format-btn" onclick="downloadDeckPng()">
+          <span style="font-size:1.6rem">🖼️</span>
+          <strong>Image (PNG)</strong>
+          <span>Card grid · save to photos</span>
+        </button>
+        <button class="dl-format-btn" onclick="downloadDeckPdf()">
+          <span style="font-size:1.6rem">📄</span>
+          <strong>PDF / Print</strong>
+          <span>Opens print dialog</span>
+        </button>
+      </div>
+      <div class="share-modal-footer" style="margin-top:1rem">
+        <button class="btn-ghost" onclick="document.getElementById('dl-overlay')?.remove()" style="font-size:0.72rem;padding:0.28rem 0.7rem">Cancel</button>
+      </div>
+    </div>`
+  document.body.appendChild(overlay)
+}
+
+// Rounded-rect path helper (fallback for browsers without ctx.roundRect)
+function _rrPath(ctx, x, y, w, h, r) {
+  if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(x, y, w, h, r); return }
+  ctx.beginPath()
+  ctx.moveTo(x + r, y)
+  ctx.lineTo(x + w - r, y);  ctx.arcTo(x + w, y,     x + w, y + r,     r)
+  ctx.lineTo(x + w, y + h - r); ctx.arcTo(x + w, y + h, x + w - r, y + h, r)
+  ctx.lineTo(x + r, y + h);  ctx.arcTo(x,     y + h, x,     y + h - r, r)
+  ctx.lineTo(x, y + r);      ctx.arcTo(x,     y,     x + r, y,         r)
+  ctx.closePath()
+}
+
+async function downloadDeckPng() {
+  document.getElementById('dl-overlay')?.remove()
+  const deck = getActiveDeck()
+  if (!deck?.cards.length) return
+  showToast('⏳ Generating image…')
+
+  const COLS = 5, CW = 130, CH = 182, GAP = 10, PAD = 16, HEADER_H = 68, NAME_H = 16
+  const cards = [...deck.cards].sort((a, b) => a.card.name.localeCompare(b.card.name))
+  const total = cards.reduce((s, e) => s + e.qty, 0)
+  const rows = Math.ceil(cards.length / COLS)
+  const W = PAD * 2 + COLS * (CW + GAP) - GAP
+  const H = HEADER_H + PAD + rows * (CH + GAP + NAME_H) + PAD
+
+  const canvas = document.createElement('canvas')
+  canvas.width = W; canvas.height = H
+  const ctx = canvas.getContext('2d')
+
+  // Background
+  const bg = ctx.createLinearGradient(0, 0, 0, H)
+  bg.addColorStop(0, '#1a1a2e'); bg.addColorStop(1, '#0d1b2a')
+  ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H)
+
+  // Header bar
+  ctx.fillStyle = '#d72323'; ctx.fillRect(0, 0, W, HEADER_H)
+  // Pokéball circle decoration
+  ctx.fillStyle = 'rgba(0,0,0,0.15)'; ctx.beginPath(); ctx.arc(W - 36, HEADER_H / 2, 40, 0, Math.PI * 2); ctx.fill()
+  ctx.fillStyle = 'rgba(255,255,255,0.08)'; ctx.beginPath(); ctx.arc(W - 36, HEADER_H / 2, 28, 0, Math.PI * 2); ctx.fill()
+  // Deck title
+  ctx.fillStyle = '#fff'; ctx.font = 'bold 22px system-ui,sans-serif'
+  ctx.fillText(deck.name, PAD, 36)
+  ctx.fillStyle = 'rgba(255,255,255,0.7)'; ctx.font = '12px system-ui,sans-serif'
+  ctx.fillText(`${total} cards  ·  Card Sensei`, PAD, 56)
+
+  // Load images concurrently with CORS
+  const loaded = await Promise.all(cards.map(entry => new Promise(res => {
+    const img = new Image(); img.crossOrigin = 'anonymous'
+    img.onload  = () => res({ img, entry })
+    img.onerror = () => res({ img: null, entry })
+    img.src = (entry.card.image || '') + '/low.webp'
+  })))
+
+  // Draw cards
+  loaded.forEach(({ img, entry }, i) => {
+    const col = i % COLS, row = Math.floor(i / COLS)
+    const x = PAD + col * (CW + GAP)
+    const y = HEADER_H + PAD + row * (CH + GAP + NAME_H)
+
+    // Card rounded clip
+    ctx.save()
+    _rrPath(ctx, x, y, CW, CH, 7); ctx.clip()
+    if (img) {
+      ctx.drawImage(img, x, y, CW, CH)
+    } else {
+      // Stylised placeholder
+      ctx.fillStyle = '#1e3a5f'; ctx.fillRect(x, y, CW, CH)
+      ctx.fillStyle = 'rgba(255,255,255,0.12)'
+      ctx.fillRect(x, y + CH * 0.55, CW, CH * 0.45)
+      ctx.fillStyle = 'rgba(255,255,255,0.5)'; ctx.font = '9px system-ui,sans-serif'
+      ctx.textAlign = 'center'
+      // Word-wrap name inside placeholder
+      const words = entry.card.name.split(' ')
+      let line = '', ly = y + CH / 2 - 6
+      words.forEach(w => {
+        const test = line ? line + ' ' + w : w
+        if (ctx.measureText(test).width > CW - 12) { ctx.fillText(line, x + CW / 2, ly); line = w; ly += 13 }
+        else line = test
+      })
+      ctx.fillText(line, x + CW / 2, ly)
+      ctx.textAlign = 'left'
+    }
+    ctx.restore()
+
+    // Quantity badge (always shown)
+    const bx = x + CW - 13, by = y + 13
+    ctx.fillStyle = 'rgba(0,0,0,0.45)'; ctx.beginPath(); ctx.arc(bx, by, 13, 0, Math.PI * 2); ctx.fill()
+    ctx.fillStyle = entry.qty > 1 ? '#fbbf24' : 'rgba(255,255,255,0.65)'
+    ctx.font = `bold 10px system-ui,sans-serif`; ctx.textAlign = 'center'
+    ctx.fillText('×' + entry.qty, bx, by + 4); ctx.textAlign = 'left'
+
+    // Card name label below
+    ctx.fillStyle = 'rgba(255,255,255,0.78)'; ctx.font = '8.5px system-ui,sans-serif'
+    ctx.textAlign = 'center'
+    let nm = entry.card.name
+    while (ctx.measureText(nm).width > CW - 4 && nm.length > 2) nm = nm.slice(0, -1)
+    if (nm !== entry.card.name) nm += '…'
+    ctx.fillText(nm, x + CW / 2, y + CH + 12); ctx.textAlign = 'left'
+  })
+
+  // Try to download (may fail if any image blocked CORS)
+  try {
+    const a = document.createElement('a')
+    a.download = deck.name.replace(/[^a-z0-9 _-]/gi, '').trim().replace(/\s+/g, '_') + '_deck.png'
+    a.href = canvas.toDataURL('image/png')
+    a.click()
+    showToast('🖼️ Image downloaded!')
+  } catch {
+    showToast('⚠️ CORS blocked image export — try PDF instead')
+  }
+}
+
+function downloadDeckPdf() {
+  document.getElementById('dl-overlay')?.remove()
+  const deck = getActiveDeck()
+  if (!deck?.cards.length) return
+  const total = deck.cards.reduce((s, e) => s + e.qty, 0)
+  const sorted = [...deck.cards].sort((a, b) => a.card.name.localeCompare(b.card.name))
+
+  const cardsHtml = sorted.map(e => `
+    <div class="c">
+      <div class="ci">
+        <img src="${escHtml((e.card.image || '') + '/low.webp')}" alt="${escHtml(e.card.name)}" loading="lazy">
+        ${e.qty > 1 ? `<div class="qb">×${e.qty}</div>` : ''}
+      </div>
+      <div class="cn">${escHtml(e.card.name)}</div>
+      ${e.card.set?.name ? `<div class="cs">${escHtml(e.card.set.name)}</div>` : ''}
+    </div>`).join('')
+
+  const html = `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
+<title>${escHtml(deck.name)} — Card Sensei</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#fff;color:#111;padding:18px}
+.hd{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:14px;padding-bottom:12px;border-bottom:3px solid #d72323}
+.ht{font-size:22px;font-weight:700;color:#111}.hm{font-size:11px;color:#777;margin-top:3px}
+.pb{background:#d72323;color:#fff;border:none;padding:8px 18px;border-radius:7px;cursor:pointer;font-size:13px;font-weight:600;white-space:nowrap;flex-shrink:0;margin-left:12px}
+.pb:hover{background:#b91c1c}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(108px,1fr));gap:9px}
+.c{display:flex;flex-direction:column;align-items:center}
+.ci{position:relative;width:100%}
+.ci img{width:100%;aspect-ratio:63/88;object-fit:cover;border-radius:7px;border:1px solid #ddd;display:block;background:#f0f0f0}
+.qb{position:absolute;top:4px;right:4px;background:#d72323;color:#fff;font-size:10px;font-weight:700;border-radius:50%;width:21px;height:21px;display:flex;align-items:center;justify-content:center}
+.cn{font-size:8.5px;font-weight:600;text-align:center;margin-top:4px;color:#222;width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cs{font-size:7.5px;color:#999;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;width:100%}
+footer{margin-top:18px;text-align:center;font-size:9px;color:#ccc;border-top:1px solid #eee;padding-top:10px}
+@media print{.pb{display:none!important}body{padding:8px}.grid{gap:6px}}
+</style></head><body>
+<div class="hd">
+  <div>
+    <div class="ht">${escHtml(deck.name)}</div>
+    <div class="hm">${total} cards &nbsp;·&nbsp; Card Sensei &nbsp;·&nbsp; ${new Date().toLocaleDateString()}</div>
+  </div>
+  <button class="pb" onclick="window.print()">🖨️ Print / Save as PDF</button>
+</div>
+<div class="grid">${cardsHtml}</div>
+<footer>Card Sensei · カード先生 · Pokémon TCG Translation Tool · card data from TCGDex</footer>
+</body></html>`
+
+  const win = window.open('', '_blank')
+  if (!win) { showToast('⚠️ Allow pop-ups to open PDF view'); return }
+  win.document.write(html)
+  win.document.close()
 }
 
 // ═══════════════════════════════════════════════════
