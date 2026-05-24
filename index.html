@@ -839,6 +839,38 @@ footer {
   flex-shrink: 0; transition: all 0.15s;
 }
 .builder-tab-add:hover { border-color: rgba(215,35,35,0.6); color: rgba(215,35,35,0.8); }
+/* Deck tab with delete × button */
+.builder-tab-group { display: flex; align-items: stretch; flex-shrink: 0; }
+.builder-tab-group .builder-tab { border-radius: 999px 0 0 999px; }
+.builder-tab-del {
+  padding: 0 0.45rem; border: 1.5px solid rgba(238,238,238,0.18); border-left: none;
+  border-radius: 0 999px 999px 0; font-size: 0.75rem; line-height: 1;
+  color: rgba(238,238,238,0.25); transition: all 0.15s; display: flex; align-items: center;
+}
+.builder-tab-del:hover { color: var(--red); border-color: rgba(215,35,35,0.5); background: rgba(215,35,35,0.08); }
+.builder-tab-group .builder-tab.active + .builder-tab-del { border-color: var(--red); border-left: none; }
+/* Share modal */
+.share-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 9999;
+  display: flex; align-items: center; justify-content: center; padding: 1rem;
+}
+.share-modal {
+  background: var(--surface); border-radius: 0.75rem; padding: 1.25rem 1.25rem 1rem;
+  width: min(380px, 100%); box-shadow: var(--shadow-lg);
+  display: flex; flex-direction: column; gap: 0.85rem;
+}
+.share-modal-title { font-size: 1rem; font-weight: 600; color: var(--text-primary); }
+.share-modal-list { display: flex; flex-direction: column; gap: 0.4rem; }
+.share-modal-item {
+  display: flex; align-items: center; gap: 0.65rem;
+  padding: 0.55rem 0.7rem; border-radius: 0.45rem;
+  border: 1.5px solid var(--border-subtle); cursor: pointer; transition: border-color 0.14s;
+}
+.share-modal-item:hover { border-color: var(--border-mid); }
+.share-modal-item input[type=checkbox] { accent-color: var(--red); width: 1rem; height: 1rem; flex-shrink: 0; cursor: pointer; }
+.share-modal-item-name { flex: 1; font-size: 0.82rem; font-weight: 500; color: var(--text-primary); pointer-events: none; }
+.share-modal-count { font-size: 0.65rem; color: var(--text-secondary); font-family: var(--font-mono); pointer-events: none; }
+.share-modal-footer { display: flex; gap: 0.5rem; justify-content: flex-end; padding-top: 0.1rem; }
 .builder-body { flex: 1; display: flex; overflow: hidden; }
 .builder-left {
   flex: 1; display: flex; flex-direction: column; overflow: hidden;
@@ -3575,7 +3607,7 @@ function openBuilder() {
       <div class="builder-tabs" id="builder-tabs"></div>
       <button class="builder-tab-add" onclick="createNewDeck()" title="New deck">+ New</button>
       <div style="flex-shrink:0;display:flex;gap:0.5rem;margin-left:0.5rem">
-        <button class="btn-ghost" onclick="shareDeck()" style="font-size:0.65rem;padding:0.25rem 0.65rem;border-color:rgba(238,238,238,0.22);color:rgba(238,238,238,0.7)">🔗 Share</button>
+        <button class="btn-ghost" onclick="openShareModal()" style="font-size:0.65rem;padding:0.25rem 0.65rem;border-color:rgba(238,238,238,0.22);color:rgba(238,238,238,0.7)">🔗 Share</button>
         <button class="btn-gold" onclick="closeBuilder()" style="font-size:0.65rem;padding:0.25rem 0.65rem">✓ Done</button>
       </div>
     </div>
@@ -3625,9 +3657,16 @@ function closeBuilder() {
 function renderBuilderTabs() {
   const c = document.getElementById('builder-tabs')
   if (!c) return
-  c.innerHTML = decks.map(d => `
-    <button class="builder-tab${d.id===activeDeckId?' active':''}" onclick="switchActiveDeck('${escAtt(d.id)}')">${escHtml(d.name)}</button>
-  `).join('')
+  const multi = decks.length > 1
+  c.innerHTML = decks.map(d => {
+    const active = d.id === activeDeckId ? ' active' : ''
+    if (multi) return `
+      <div class="builder-tab-group">
+        <button class="builder-tab${active}" onclick="switchActiveDeck('${escAtt(d.id)}')">${escHtml(d.name)}</button>
+        <button class="builder-tab-del" onclick="deleteDeck('${escAtt(d.id)}')" title="Delete deck">×</button>
+      </div>`
+    return `<button class="builder-tab${active}" onclick="switchActiveDeck('${escAtt(d.id)}')">${escHtml(d.name)}</button>`
+  }).join('')
 }
 
 function renderBuilderLeft() {
@@ -4118,59 +4157,119 @@ function closeViewerCard() {
 // ═══════════════════════════════════════════════════
 // SHARE LINK
 // ═══════════════════════════════════════════════════
-function shareDeck() {
-  const d = getActiveDeck()
-  if (!d) return
-  const payload = {
+// ── Share modal ──────────────────────────────────────
+function openShareModal() {
+  document.getElementById('share-overlay')?.remove()
+  const overlay = document.createElement('div')
+  overlay.id = 'share-overlay'
+  overlay.className = 'share-overlay'
+  overlay.onclick = e => { if (e.target === overlay) closeShareModal() }
+
+  const items = decks.map(d => {
+    const total = d.cards.reduce((s,e)=>s+e.qty, 0)
+    const checked = d.id === activeDeckId ? ' checked' : ''
+    return `<label class="share-modal-item">
+      <input type="checkbox" class="share-deck-check" data-deck-id="${escAtt(d.id)}"${checked}>
+      <span class="share-modal-item-name">${escHtml(d.name)}</span>
+      <span class="share-modal-count">${total} card${total!==1?'s':''}</span>
+    </label>`
+  }).join('')
+
+  overlay.innerHTML = `
+    <div class="share-modal" onclick="event.stopPropagation()">
+      <div class="share-modal-title">🔗 Share Decks</div>
+      <p style="font-size:0.72rem;color:var(--text-secondary);margin-top:-0.5rem">
+        Select decks to share. Recipients get a full editable copy.
+      </p>
+      <div class="share-modal-list">${items}</div>
+      <div class="share-modal-footer">
+        <button class="btn-ghost" onclick="closeShareModal()" style="font-size:0.72rem;padding:0.28rem 0.7rem">Cancel</button>
+        <button class="btn-gold"  onclick="copyShareLink()"  style="font-size:0.72rem;padding:0.28rem 0.7rem">📋 Copy Link</button>
+      </div>
+    </div>`
+  document.body.appendChild(overlay)
+}
+
+function closeShareModal() { document.getElementById('share-overlay')?.remove() }
+
+function copyShareLink() {
+  const checks = [...document.querySelectorAll('.share-deck-check:checked')]
+  if (!checks.length) { showToast('Select at least one deck'); return }
+  const ids = new Set(checks.map(el => el.dataset.deckId))
+  const selected = decks.filter(d => ids.has(d.id))
+  const payloads = selected.map(d => ({
     n: d.name,
     c: d.cards.map(e => ({ i:e.card.id, q:e.qty, n:e.card.name, img:e.card.image, li:e.card.localId, la:e.card._lang, s:e.card.set }))
-  }
+  }))
   try {
-    const encoded = btoa(unescape(encodeURIComponent(JSON.stringify(payload))))
-    const url = window.location.href.split('#')[0] + '#deck=' + encoded
-    navigator.clipboard.writeText(url).catch(()=>{})
-    showToast('🔗 Share link copied to clipboard!')
+    const encoded = btoa(unescape(encodeURIComponent(JSON.stringify(payloads))))
+    const url = window.location.href.split('#')[0] + '#decks=' + encoded
+    const label = `${selected.length} deck${selected.length>1?'s':''}`
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(url)
+        .then(() => { showToast(`🔗 Link copied! (${label})`); closeShareModal() })
+        .catch(() => { prompt('Copy this share link:', url); closeShareModal() })
+    } else {
+      prompt('Copy this share link:', url); closeShareModal()
+    }
   } catch { showToast('Failed to generate share link') }
 }
 
+// ── Import shared decks ──────────────────────────────
 function checkShareHash() {
   const hash = window.location.hash
-  if (!hash.startsWith('#deck=')) return
-  try {
-    const raw = decodeURIComponent(escape(atob(hash.slice(6))))
-    const payload = JSON.parse(raw)
-    if (!payload?.n || !Array.isArray(payload?.c)) return
-    const total = payload.c.reduce((s,c)=>s+c.q, 0)
-    const root  = document.getElementById('import-banner-root')
-    root.innerHTML = `
+  let payloads = []
+
+  if (hash.startsWith('#deck=')) {
+    // Legacy single-deck format — keep backward compat
+    try {
+      const raw = decodeURIComponent(escape(atob(hash.slice(6))))
+      const p = JSON.parse(raw)
+      if (p?.n && Array.isArray(p?.c)) payloads = [p]
+    } catch {}
+  } else if (hash.startsWith('#decks=')) {
+    // New multi-deck format
+    try {
+      const raw = decodeURIComponent(escape(atob(hash.slice(7))))
+      const arr = JSON.parse(raw)
+      if (Array.isArray(arr)) payloads = arr.filter(p => p?.n && Array.isArray(p?.c))
+    } catch {}
+  }
+  if (!payloads.length) return
+
+  const root = document.getElementById('import-banner-root')
+  const totalCards = payloads.reduce((s,p)=>s+p.c.reduce((ss,c)=>ss+c.q,0),0)
+  const deckLabel = payloads.length === 1
+    ? `deck <span class="import-banner-name">"${escHtml(payloads[0].n)}"</span>`
+    : `<span class="import-banner-name">${payloads.length} decks</span>: ${payloads.map(p=>`"${escHtml(p.n)}"`).join(', ')}`
+
+  root.innerHTML = `
     <div class="import-banner">
       <span style="font-size:1.2rem">🃏</span>
-      <span class="import-banner-text">Import shared deck <span class="import-banner-name">"${escHtml(payload.n)}"</span> — ${total} card${total!==1?'s':''}?</span>
-      <button class="btn-gold" onclick="importDeck()" style="font-size:0.72rem;padding:0.3rem 0.75rem;flex-shrink:0">Import</button>
+      <span class="import-banner-text">Import shared ${deckLabel} — ${totalCards} card${totalCards!==1?'s':''}?</span>
+      <button class="btn-gold" onclick="importDecks()" style="font-size:0.72rem;padding:0.3rem 0.75rem;flex-shrink:0">Import${payloads.length>1?' All':''}</button>
       <button class="btn-ghost" onclick="dismissImport()" style="font-size:0.72rem;padding:0.3rem 0.6rem;flex-shrink:0">✕</button>
     </div>`
-    window._pendingImport = payload
-    // Clean URL without reload
-    window.history.replaceState(null, '', window.location.href.split('#')[0])
-  } catch { /* bad hash */ }
+  window._pendingImport = payloads
+  window.history.replaceState(null, '', window.location.href.split('#')[0])
 }
 
-function importDeck() {
-  const p = window._pendingImport
-  if (!p) return
-  const cards = p.c.map(c => ({
-    card: { id:c.i, name:c.n, image:c.img, localId:c.li, _lang:c.la||'en', set:c.s },
-    qty: c.q
-  }))
-  const nd = { id: uid(), name: p.n + ' (imported)', cards }
-  decks.push(nd)
-  activeDeckId = nd.id
-  saveDecks()
-  renderDeckPanel()
-  dismissImport()
-  showToast(`Imported "${p.n}" · ${p.c.reduce((s,c)=>s+c.q,0)} cards`)
+function importDecks() {
+  const payloads = window._pendingImport
+  if (!payloads?.length) return
+  payloads.forEach(p => {
+    const cards = p.c.map(c => ({
+      card: { id:c.i, name:c.n, image:c.img, localId:c.li, _lang:c.la||'en', set:c.s },
+      qty: c.q
+    }))
+    decks.push({ id: uid(), name: p.n + ' (shared)', cards })
+  })
+  activeDeckId = decks[decks.length - 1].id
+  saveDecks(); renderDeckPanel(); dismissImport()
+  showToast(`✅ Imported ${payloads.length} deck${payloads.length>1?'s':''} · ${payloads.reduce((s,p)=>s+p.c.reduce((ss,c)=>ss+c.q,0),0)} cards`)
   window._pendingImport = null
 }
+function importDeck() { importDecks() }   // backward-compat alias
 
 function dismissImport() {
   document.getElementById('import-banner-root').innerHTML = ''
