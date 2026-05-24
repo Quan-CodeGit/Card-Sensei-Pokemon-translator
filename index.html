@@ -4202,7 +4202,7 @@ function copyShareLink() {
     c: d.cards.map(e => ({ i:e.card.id, q:e.qty, n:e.card.name, img:e.card.image, li:e.card.localId, la:e.card._lang, s:e.card.set }))
   }))
   try {
-    const encoded = btoa(unescape(encodeURIComponent(JSON.stringify(payloads))))
+    const encoded = encodeURIComponent(btoa(unescape(encodeURIComponent(JSON.stringify(payloads)))))
     const url = window.location.href.split('#')[0] + '#decks=' + encoded
     const label = `${selected.length} deck${selected.length>1?'s':''}`
     if (navigator.clipboard?.writeText) {
@@ -4216,65 +4216,54 @@ function copyShareLink() {
 }
 
 // ── Import shared decks ──────────────────────────────
+function _decodePayload(b64) {
+  // Support both plain base64 and URL-percent-encoded base64
+  const cleaned = decodeURIComponent(b64)
+  return JSON.parse(decodeURIComponent(escape(atob(cleaned))))
+}
+
 function checkShareHash() {
   const hash = window.location.hash
   let payloads = []
 
-  if (hash.startsWith('#deck=')) {
-    // Legacy single-deck format — keep backward compat
-    try {
-      const raw = decodeURIComponent(escape(atob(hash.slice(6))))
-      const p = JSON.parse(raw)
+  try {
+    if (hash.startsWith('#deck=')) {
+      // Legacy single-deck format
+      const p = _decodePayload(hash.slice(6))
       if (p?.n && Array.isArray(p?.c)) payloads = [p]
-    } catch {}
-  } else if (hash.startsWith('#decks=')) {
-    // New multi-deck format
-    try {
-      const raw = decodeURIComponent(escape(atob(hash.slice(7))))
-      const arr = JSON.parse(raw)
+    } else if (hash.startsWith('#decks=')) {
+      // Multi-deck format
+      const arr = _decodePayload(hash.slice(7))
       if (Array.isArray(arr)) payloads = arr.filter(p => p?.n && Array.isArray(p?.c))
-    } catch {}
-  }
+    }
+  } catch(e) { console.warn('Share hash parse error:', e) }
+
   if (!payloads.length) return
 
-  const root = document.getElementById('import-banner-root')
-  const totalCards = payloads.reduce((s,p)=>s+p.c.reduce((ss,c)=>ss+c.q,0),0)
-  const deckLabel = payloads.length === 1
-    ? `deck <span class="import-banner-name">"${escHtml(payloads[0].n)}"</span>`
-    : `<span class="import-banner-name">${payloads.length} decks</span>: ${payloads.map(p=>`"${escHtml(p.n)}"`).join(', ')}`
-
-  root.innerHTML = `
-    <div class="import-banner">
-      <span style="font-size:1.2rem">🃏</span>
-      <span class="import-banner-text">Import shared ${deckLabel} — ${totalCards} card${totalCards!==1?'s':''}?</span>
-      <button class="btn-gold" onclick="importDecks()" style="font-size:0.72rem;padding:0.3rem 0.75rem;flex-shrink:0">Import${payloads.length>1?' All':''}</button>
-      <button class="btn-ghost" onclick="dismissImport()" style="font-size:0.72rem;padding:0.3rem 0.6rem;flex-shrink:0">✕</button>
-    </div>`
-  window._pendingImport = payloads
+  // Clear hash from URL immediately
   window.history.replaceState(null, '', window.location.href.split('#')[0])
-}
 
-function importDecks() {
-  const payloads = window._pendingImport
-  if (!payloads?.length) return
+  // Auto-import — no hidden banner needed
+  const totalCards = payloads.reduce((s,p)=>s+p.c.reduce((ss,c)=>ss+c.q,0),0)
   payloads.forEach(p => {
     const cards = p.c.map(c => ({
       card: { id:c.i, name:c.n, image:c.img, localId:c.li, _lang:c.la||'en', set:c.s },
       qty: c.q
     }))
-    decks.push({ id: uid(), name: p.n + ' (shared)', cards })
+    // Avoid duplicating if same deck name already exists
+    const label = p.n.endsWith(' (shared)') ? p.n : p.n + ' (shared)'
+    decks.push({ id: uid(), name: label, cards })
   })
   activeDeckId = decks[decks.length - 1].id
-  saveDecks(); renderDeckPanel(); dismissImport()
-  showToast(`✅ Imported ${payloads.length} deck${payloads.length>1?'s':''} · ${payloads.reduce((s,p)=>s+p.c.reduce((ss,c)=>ss+c.q,0),0)} cards`)
-  window._pendingImport = null
+  saveDecks()
+  renderDeckPanel()
+  const deckNames = payloads.map(p=>p.n).join(', ')
+  showToast(`🃏 Imported "${deckNames}" — ${totalCards} card${totalCards!==1?'s':''}`)
 }
-function importDeck() { importDecks() }   // backward-compat alias
 
-function dismissImport() {
-  document.getElementById('import-banner-root').innerHTML = ''
-  window._pendingImport = null
-}
+function importDecks() { /* no-op — auto-import handled by checkShareHash */ }
+function importDeck()  { /* no-op — auto-import handled by checkShareHash */ }
+function dismissImport() { document.getElementById('import-banner-root').innerHTML = '' }
 
 // ═══════════════════════════════════════════════════
 // TOAST
