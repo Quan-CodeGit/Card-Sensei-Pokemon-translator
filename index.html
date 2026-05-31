@@ -557,6 +557,15 @@ body > * { position: relative; z-index: 1; }
 .deck-empty-icon  { font-size: 1.4rem; }
 .deck-empty-text  { font-size: 0.72rem; color: var(--text-secondary); font-family: var(--font-mono); }
 
+/* Deck group header (Pokémon / Trainer / Energy divider) */
+.deck-group-header {
+  font-size: 0.62rem; font-family: var(--font-mono); font-weight: 600;
+  letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--text-secondary); padding: 0.45rem 0.5rem 0.2rem;
+  border-top: 1px solid var(--border-subtle); margin-top: 0.15rem;
+}
+.deck-group-header:first-child { border-top: none; margin-top: 0; }
+
 .deck-entry {
   display: flex; align-items: center; gap: 0.5rem;
   padding: 0.4rem 0.5rem; border-radius: 0.5rem;
@@ -2287,7 +2296,15 @@ function renderGrid(cards) {
     const jpBadge = card._jpOnly ? `<span class="badge-jp">JP Only</span>` : ''
 
     // Store card data for qty functions
-    const brief = { id:card.id, name:card.name, image:imgBase, localId:card.localId, set:card.set, _lang:card._lang||'en', _jpOnly:!!card._jpOnly }
+    // _cat/_stage/_sub: infer from active filter or card object (set-browse cards have full data)
+    const _gcat   = card.category || (filters.category !== 'all' ? filters.category : null)
+    const _gstage = card.stage    || (filters.pokemonStage !== 'all' ? filters.pokemonStage : null)
+    const _gsub   = card.suffix   || card.trainerType || null
+    const brief = {
+      id:card.id, name:card.name, image:imgBase, localId:card.localId, set:card.set,
+      _lang:card._lang||'en', _jpOnly:!!card._jpOnly,
+      _cat:_gcat, _stage:_gstage, _sub:_gsub
+    }
     cardDataStore.set(card.id, brief)
 
     const boxQty  = box.find(e=>e.card.id===card.id)?.qty  ?? 0
@@ -2456,13 +2473,31 @@ function renderModal({ ja, en, id, primaryCard, sourceLang }) {
   const deckFull  = deckTotal >= 60
   const maxCopies = deckQty >= 4
 
+  // Extract category/stage/subtype from full card detail so deck entries can sort correctly
+  const _cat   = primary.category   || null          // 'Pokemon' | 'Trainer' | 'Energy'
+  const _stage = primary.stage      || null          // 'Basic' | 'Stage1' | 'Stage2'
+  const _sub   = primary.suffix || primary.trainerType || null   // 'Supporter'|'Item'|'Tool'|'Stadium'
+
   const briefCard = {
     id, name: primary.name, image: imgBase,
     localId: primary.localId, set: primary.set,
-    _lang: sourceLang, _jpOnly: !en && !!ja
+    _lang: sourceLang, _jpOnly: !en && !!ja,
+    _cat, _stage, _sub
   }
   modalCardData = briefCard   // store for qty controls
   cardDataStore.set(id, briefCard)
+
+  // Backfill category into any existing deck/box entry for this card
+  // (handles cards saved before this field existed)
+  if (_cat) {
+    for (const dk of decks) {
+      const e = dk.cards.find(e => e.card.id === id)
+      if (e) { e.card._cat = _cat; e.card._stage = _stage; e.card._sub = _sub }
+    }
+    const bx = box.find(e => e.card.id === id)
+    if (bx) { bx.card._cat = _cat; bx.card._stage = _stage; bx.card._sub = _sub }
+    saveDecks()
+  }
 
   const root = document.getElementById('modal-root')
   root.innerHTML = `
@@ -2664,6 +2699,51 @@ function modalQtyChange(target, delta) {
 }
 
 // ═══════════════════════════════════════════════════
+// DECK SORT HELPERS
+// ═══════════════════════════════════════════════════
+/** Return [groupIndex, subgroupIndex, name] sort key for a deck/box card entry */
+function _deckSortKey(card) {
+  const cat   = card._cat  || ''
+  const stage = card._stage || ''
+  const sub   = (card._sub || '').toLowerCase()
+  const name  = card.name  || ''
+
+  if (cat === 'Pokemon') {
+    // Stage 2 → Stage 1 → Basic → (unknown stage)
+    const si = stage === 'Stage2' ? 0 : stage === 'Stage1' ? 1 : 2
+    return [0, si, name]
+  }
+  if (cat === 'Trainer') {
+    // Supporter → Tool → Item → Stadium → other
+    const ti = sub === 'supporter' ? 0 : sub === 'tool' ? 1 : sub === 'item' ? 2 : sub === 'stadium' ? 3 : 4
+    return [1, ti, name]
+  }
+  if (cat === 'Energy') return [2, 0, name]
+  // Unknown — try basic-energy name heuristic, otherwise send to end
+  if (isBasicEnergyCard(name)) return [2, 0, name]
+  return [3, 0, name]
+}
+
+function _cmpDeck(a, b) {
+  const ka = _deckSortKey(a.card), kb = _deckSortKey(b.card)
+  return ka[0] - kb[0] || ka[1] - kb[1] || ka[2].localeCompare(kb[2])
+}
+
+/** Section header label for a group index */
+function _groupLabel(groupIdx, subIdx, count) {
+  if (groupIdx === 0) {
+    const stages = ['Stage 2', 'Stage 1', 'Basic']
+    return `🐉 ${stages[subIdx] ?? 'Pokémon'} · ${count}`
+  }
+  if (groupIdx === 1) {
+    const subs = ['Supporter', 'Tool', 'Item', 'Stadium', 'Trainer']
+    return `📋 ${subs[subIdx] ?? 'Trainer'} · ${count}`
+  }
+  if (groupIdx === 2) return `⚡ Energy · ${count}`
+  return `❓ Other · ${count}`
+}
+
+// ═══════════════════════════════════════════════════
 // DECK PANEL RENDERING
 // ═══════════════════════════════════════════════════
 function switchDeckTab(tab) {
@@ -2700,17 +2780,33 @@ function renderDeckPanel() {
     return
   }
 
-  list.innerHTML = source.map(({card, qty}) => {
+  // Sort deck/box by category group: Pokémon (S2→S1→Basic) → Trainer (Supporter→Tool→Item) → Energy
+  const sorted = [...source].sort(_cmpDeck)
+
+  // Build HTML with section headers between groups
+  let html = ''
+  let lastKey = null
+  const tab = currentTab
+  for (const {card, qty} of sorted) {
+    const sk      = _deckSortKey(card)
+    const groupKey = `${sk[0]}-${sk[1]}`
+    if (groupKey !== lastKey) {
+      lastKey = groupKey
+      // Count how many entries share this exact group
+      const groupCount = sorted.filter(e => {
+        const k = _deckSortKey(e.card); return k[0] === sk[0] && k[1] === sk[1]
+      }).reduce((s, e) => s + e.qty, 0)
+      html += `<div class="deck-group-header">${_groupLabel(sk[0], sk[1], groupCount)}</div>`
+    }
+
     const imgSrc  = card.image ? `${card.image}/low.webp` : null
     const isJP    = card._lang === 'ja'
     const eid     = escAtt(card.id)
-    const tab     = currentTab
-    // For box tab: show how many copies are committed to deck
     const lang    = escAtt(card._lang || 'en')
     const dkQty   = currentTab === 'box' ? (getDeck().find(e=>e.card.id===card.id)?.qty ?? 0) : 0
     const allUsed = currentTab === 'box' && dkQty >= qty
     const partUsed= currentTab === 'box' && dkQty > 0 && dkQty < qty
-    return `
+    html += `
     <div class="deck-entry${allUsed?' used-in-deck':''}"
       onclick="cardClick('${eid}','${lang}',event)"
       onmousedown="startHold(event,'${eid}','${lang}')" onmouseup="cancelHold()" onmouseleave="cancelHold()"
@@ -2733,7 +2829,8 @@ function renderDeckPanel() {
         <button class="deck-qty-btn" onclick="qtyChange('${tab}','${eid}',1)" title="Add one">+</button>
       </div>
     </div>`
-  }).join('')
+  }
+  list.innerHTML = html
 }
 
 function removeOne(cardId, source) {
