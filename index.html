@@ -2486,15 +2486,16 @@ function renderModal({ ja, en, id, primaryCard, sourceLang }) {
   const maxCopies = deckQty >= 4
 
   // Extract category/stage/subtype from full card detail so deck entries can sort correctly
-  const _cat   = primary.category   || null          // 'Pokemon' | 'Trainer' | 'Energy'
-  const _stage = primary.stage      || null          // 'Basic' | 'Stage1' | 'Stage2'
-  const _sub   = primary.suffix || primary.trainerType || null   // 'Supporter'|'Item'|'Tool'|'Stadium'
+  const _cat        = primary.category   || null   // 'Pokemon' | 'Trainer' | 'Energy'
+  const _stage      = primary.stage      || null   // 'Basic' | 'Stage1' | 'Stage2'
+  const _sub        = primary.suffix || primary.trainerType || primary.type || null  // 'Supporter'|'Item'|'Tool'|'Stadium'
+  const _evolvesFrom= primary.evolvesFrom || null  // secondary-layer: if set, card is ≥ Stage 1
 
   const briefCard = {
     id, name: primary.name, image: imgBase,
     localId: primary.localId, set: primary.set,
     _lang: sourceLang, _jpOnly: !en && !!ja,
-    _cat, _stage, _sub
+    _cat, _stage, _sub, _evolvesFrom
   }
   modalCardData = briefCard   // store for qty controls
   cardDataStore.set(id, briefCard)
@@ -2504,10 +2505,10 @@ function renderModal({ ja, en, id, primaryCard, sourceLang }) {
   if (_cat) {
     for (const dk of decks) {
       const e = dk.cards.find(e => e.card.id === id)
-      if (e) { e.card._cat = _cat; e.card._stage = _stage; e.card._sub = _sub }
+      if (e) { e.card._cat = _cat; e.card._stage = _stage; e.card._sub = _sub; e.card._evolvesFrom = _evolvesFrom }
     }
     const bx = box.find(e => e.card.id === id)
-    if (bx) { bx.card._cat = _cat; bx.card._stage = _stage; bx.card._sub = _sub }
+    if (bx) { bx.card._cat = _cat; bx.card._stage = _stage; bx.card._sub = _sub; bx.card._evolvesFrom = _evolvesFrom }
     saveDecks()
   }
 
@@ -2715,23 +2716,31 @@ function modalQtyChange(target, delta) {
 // ═══════════════════════════════════════════════════
 /** Return [groupIndex, subgroupIndex, name] sort key for a deck/box card entry */
 function _deckSortKey(card) {
-  const cat   = card._cat  || ''
-  const stage = card._stage || ''
-  const sub   = (card._sub || '').toLowerCase()
-  const name  = card.name  || ''
+  const cat  = card._cat  || ''
+  const name = card.name  || ''
+  // Normalise stage: use _stage from API, but if API says "Basic" yet
+  // _evolvesFrom is set, the card has an evolution chain → at least Stage 1
+  let stage = card._stage || ''
+  if (stage === 'Basic' && card._evolvesFrom) stage = 'Stage1'   // secondary-layer correction
+
+  // Use .includes() so slight API variations ("Supporter - Full Art", etc.) still match
+  const sub = (card._sub || '').toLowerCase()
+  const isSupporter = sub.includes('supporter')
+  const isTool      = sub.includes('tool')
+  const isItem      = sub.includes('item')
+  const isStadium   = sub.includes('stadium')
 
   if (cat === 'Pokemon') {
-    // Stage 2 → Stage 1 → Basic → (unknown stage)
+    // Stage 2 → Stage 1 → Basic → unknown
     const si = stage === 'Stage2' ? 0 : stage === 'Stage1' ? 1 : 2
     return [0, si, name]
   }
   if (cat === 'Trainer') {
     // Supporter → Tool → Item → Stadium → other
-    const ti = sub === 'supporter' ? 0 : sub === 'tool' ? 1 : sub === 'item' ? 2 : sub === 'stadium' ? 3 : 4
+    const ti = isSupporter ? 0 : isTool ? 1 : isItem ? 2 : isStadium ? 3 : 4
     return [1, ti, name]
   }
   if (cat === 'Energy') return [2, 0, name]
-  // Unknown — try basic-energy name heuristic, otherwise send to end
   if (isBasicEnergyCard(name)) return [2, 0, name]
   return [3, 0, name]
 }
@@ -4653,16 +4662,24 @@ function showToast(msg) {
 // Fetches full card detail for any deck/box card missing _cat, then re-renders.
 // Runs silently in the background; batched to avoid hammering the API.
 async function hydrateDeckCategories() {
-  // Collect unique card objects that need hydration
+  // Collect cards that need hydration:
+  // • missing _cat entirely (never fetched)
+  // • Trainer cards missing _sub (fetched before the suffix fix)
+  // • Pokemon cards missing _evolvesFrom (fetched before the stage fix)
+  const needsHydration = c =>
+    !c._cat ||
+    (c._cat === 'Trainer' && !c._sub) ||
+    (c._cat === 'Pokemon' && c._evolvesFrom === undefined)
+
   const seen = new Set()
   const toHydrate = []
   for (const dk of decks) {
     for (const e of dk.cards) {
-      if (!e.card._cat && !seen.has(e.card.id)) { seen.add(e.card.id); toHydrate.push(e.card) }
+      if (needsHydration(e.card) && !seen.has(e.card.id)) { seen.add(e.card.id); toHydrate.push(e.card) }
     }
   }
   for (const e of box) {
-    if (!e.card._cat && !seen.has(e.card.id)) { seen.add(e.card.id); toHydrate.push(e.card) }
+    if (needsHydration(e.card) && !seen.has(e.card.id)) { seen.add(e.card.id); toHydrate.push(e.card) }
   }
   if (!toHydrate.length) return
 
@@ -4672,22 +4689,31 @@ async function hydrateDeckCategories() {
   for (let i = 0; i < toHydrate.length; i += BATCH) {
     await Promise.all(toHydrate.slice(i, i + BATCH).map(async card => {
       try {
-        const lang = card._lang === 'ja' ? 'ja' : 'en'
-        const r = await fetch(`https://api.tcgdex.net/v2/${lang}/cards/${card.id}`)
+        // Always fetch English endpoint — most reliable for stage/suffix fields
+        const r = await fetch(`https://api.tcgdex.net/v2/en/cards/${card.id}`)
         if (!r.ok) return
         const d = await r.json()
-        const _cat   = d.category || null
-        const _stage = d.stage    || null
-        const _sub   = d.suffix   || d.trainerType || null
+        const _cat        = d.category || null
+        const _stage      = d.stage    || null
+        // Try every known field name TCGdex uses for trainer subtype
+        const _sub        = d.suffix || d.trainerType || d.type || null
+        // Secondary layer: evolvesFrom proves a "Basic" label is wrong
+        const _evolvesFrom= d.evolvesFrom || null
         if (!_cat) return
         // Update every copy of this card across all decks and box
         for (const dk of decks) {
           for (const e of dk.cards) {
-            if (e.card.id === card.id) { e.card._cat = _cat; e.card._stage = _stage; e.card._sub = _sub }
+            if (e.card.id === card.id) {
+              e.card._cat = _cat; e.card._stage = _stage
+              e.card._sub = _sub; e.card._evolvesFrom = _evolvesFrom
+            }
           }
         }
         for (const e of box) {
-          if (e.card.id === card.id) { e.card._cat = _cat; e.card._stage = _stage; e.card._sub = _sub }
+          if (e.card.id === card.id) {
+            e.card._cat = _cat; e.card._stage = _stage
+            e.card._sub = _sub; e.card._evolvesFrom = _evolvesFrom
+          }
         }
         anyUpdated = true
       } catch { /* silent — network issues shouldn't crash the panel */ }
