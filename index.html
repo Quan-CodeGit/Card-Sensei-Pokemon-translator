@@ -4358,13 +4358,14 @@ async function downloadDeckPng() {
 
   // 3× scale → crisp on phone retina screens
   const SCALE = 3
-  const COLS = 5, CW = 140, CH = 196, GAP = 12, PAD = 18, HEADER_H = 74, NAME_H = 20
-  const cards = [...deck.cards].sort((a, b) => a.card.name.localeCompare(b.card.name))
+  const CW = 140, CH = 196, GAP = 12, PAD = 18, HEADER_H = 74, NAME_H = 20
+  // Sort by category: Stage2 → Stage1 → Basic → Supporter → Item → Tool → Stadium → Energy
+  const cards = [...deck.cards].sort(_cmpDeck)
   const total = cards.reduce((s, e) => s + e.qty, 0)
-  const rows = Math.ceil(cards.length / COLS)
-  // Logical (CSS) dimensions
-  const W = PAD * 2 + COLS * (CW + GAP) - GAP
-  const H = HEADER_H + PAD + rows * (CH + GAP + NAME_H) + PAD
+  const N = cards.length
+  // Single horizontal row — wide image (zoom on phone)
+  const W = PAD * 2 + N * (CW + GAP) - GAP
+  const H = HEADER_H + PAD + CH + NAME_H + PAD
 
   const canvas = document.createElement('canvas')
   // Physical pixel dimensions = logical × SCALE
@@ -4405,11 +4406,10 @@ async function downloadDeckPng() {
     img.src = (entry.card.image || '') + '/high.webp'
   })))
 
-  // Draw cards
+  // Draw cards — single horizontal row, sorted left-to-right
   loaded.forEach(({ img, entry }, i) => {
-    const col = i % COLS, row = Math.floor(i / COLS)
-    const x = PAD + col * (CW + GAP)
-    const y = HEADER_H + PAD + row * (CH + GAP + NAME_H)
+    const x = PAD + i * (CW + GAP)
+    const y = HEADER_H + PAD
 
     // Card with rounded corners
     ctx.save()
@@ -4467,7 +4467,8 @@ function downloadDeckPdf() {
   const deck = getActiveDeck()
   if (!deck?.cards.length) return
   const total = deck.cards.reduce((s, e) => s + e.qty, 0)
-  const sorted = [...deck.cards].sort((a, b) => a.card.name.localeCompare(b.card.name))
+  // Sort by category: Stage2 → Stage1 → Basic → Supporter → Item → Tool → Stadium → Energy
+  const sorted = [...deck.cards].sort(_cmpDeck)
 
   const cardsHtml = sorted.map(e => {
     const qtyBadge = `<div class="qb ${e.qty > 1 ? 'qb-multi' : ''}">×${e.qty}</div>`
@@ -4496,24 +4497,25 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .ht{font-size:22px;font-weight:700;color:#111}.hm{font-size:11px;color:#777;margin-top:3px}
 .pb{background:#d72323;color:#fff;border:none;padding:9px 20px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:700;white-space:nowrap;flex-shrink:0;margin-left:12px;box-shadow:0 2px 6px rgba(215,35,35,0.35)}
 .pb:hover{background:#b91c1c}
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:12px}
-.c{display:flex;flex-direction:column;align-items:center;background:#fff;border-radius:9px;padding:6px 6px 7px;box-shadow:0 1px 4px rgba(0,0,0,0.08)}
+/* Horizontal filmstrip — flows left→right, wraps on print */
+.grid{display:flex;flex-direction:row;flex-wrap:wrap;gap:10px;align-items:flex-start}
+.c{display:flex;flex-direction:column;align-items:center;background:#fff;border-radius:9px;padding:6px 6px 7px;box-shadow:0 1px 4px rgba(0,0,0,0.08);flex-shrink:0;width:115px}
 .ci{position:relative;width:100%}
 .ci img{width:100%;aspect-ratio:63/88;object-fit:cover;border-radius:6px;display:block;background:#eee}
-/* Qty badge — top-right corner, always visible */
+/* Qty badge */
 .qb{position:absolute;top:5px;right:5px;background:#6b7280;color:#fff;font-size:10px;font-weight:700;border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 3px rgba(0,0,0,0.4)}
 .qb.qb-multi{background:#d72323}
-/* Name + qty text below card */
 .cn{font-size:9px;font-weight:700;text-align:center;margin-top:5px;color:#111;width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .cq{display:inline-block;font-size:8px;font-weight:600;color:#d72323;background:#fee2e2;border-radius:20px;padding:1px 7px;margin-top:3px}
 .cs{font-size:7.5px;color:#aaa;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;width:100%;margin-top:2px}
 footer{margin-top:18px;text-align:center;font-size:9px;color:#ccc;border-top:1px solid #eee;padding-top:10px}
 @media print{
+  @page{size:landscape}
   .pb{display:none!important}
   body{padding:6px;background:#fff}
   .hd{box-shadow:none;padding:8px 10px}
   .c{box-shadow:none;border:1px solid #e5e5e5}
-  .grid{gap:7px}
+  .grid{gap:6px}
 }
 </style></head><body>
 <div class="hd">
