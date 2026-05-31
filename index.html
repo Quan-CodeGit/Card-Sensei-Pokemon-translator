@@ -1036,25 +1036,25 @@ footer {
   color: #fff; flex: 1;
 }
 .viewer-subtitle { font-size: 0.65rem; font-family: var(--font-mono); color: rgba(238,238,238,0.45); }
-.viewer-body { flex: 1; overflow-y: auto; padding: 1rem; }
+.viewer-body {
+  flex: 1; display: flex; align-items: center;
+  overflow: hidden; padding: 0;
+}
+/* Single horizontal scrollable filmstrip */
 .viewer-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
-  gap: 0.625rem;
+  display: flex; flex-direction: row; align-items: flex-start;
+  overflow-x: auto; overflow-y: hidden;
+  gap: 0.6rem; padding: 1.25rem 1.5rem;
+  width: 100%; height: 100%;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(215,35,35,0.45) transparent;
 }
-/* Group header inside viewer grid — spans all columns */
-.viewer-group-header {
-  grid-column: 1 / -1;
-  font-size: 0.62rem; font-family: var(--font-mono); font-weight: 600;
-  letter-spacing: 0.07em; text-transform: uppercase;
-  color: rgba(238,238,238,0.4);
-  padding: 0.5rem 0.25rem 0.15rem;
-  border-top: 1px solid rgba(255,255,255,0.08);
-  margin-top: 0.2rem;
-}
-.viewer-group-header:first-child { border-top: none; margin-top: 0; padding-top: 0; }
+.viewer-grid::-webkit-scrollbar { height: 5px; }
+.viewer-grid::-webkit-scrollbar-track { background: transparent; }
+.viewer-grid::-webkit-scrollbar-thumb { background: rgba(215,35,35,0.45); border-radius: 99px; }
 
 .viewer-card {
+  flex-shrink: 0; width: 150px;
   border-radius: 0.625rem; overflow: hidden; background: #3A4750;
   cursor: pointer; position: relative;
   border: 2px solid transparent;
@@ -4126,23 +4126,12 @@ function closeViewer() {
 function renderViewerGrid() {
   const grid = document.getElementById('viewer-grid')
   if (!grid) return
-  const sorted = [...getDeck()].sort(_cmpDeck)
-  let html = ''
-  let lastKey = null
-  for (const {card, qty} of sorted) {
-    const sk       = _deckSortKey(card)
-    const groupKey = `${sk[0]}-${sk[1]}`
-    if (groupKey !== lastKey) {
-      lastKey = groupKey
-      const groupCount = sorted.filter(e => {
-        const k = _deckSortKey(e.card); return k[0] === sk[0] && k[1] === sk[1]
-      }).reduce((s, e) => s + e.qty, 0)
-      html += `<div class="viewer-group-header">${_groupLabel(sk[0], sk[1], groupCount)}</div>`
-    }
+  // Sort by category group, no dividers — horizontal filmstrip
+  grid.innerHTML = [...getDeck()].sort(_cmpDeck).map(({card, qty}) => {
     const imgSrc = card.image ? card.image + '/low.webp' : null
     const eid    = escAtt(card.id)
     const lang   = escAtt(card._lang || 'en')
-    html += `
+    return `
     <div class="viewer-card" onclick="openViewerCard('${eid}','${lang}')">
       <div class="viewer-card-img">
         ${imgSrc
@@ -4154,8 +4143,7 @@ function renderViewerGrid() {
         <div class="viewer-card-name">${escHtml(card.name)}</div>
       </div>
     </div>`
-  }
-  grid.innerHTML = html
+  }).join('')
 }
 
 async function openViewerCard(cardId, lang) {
