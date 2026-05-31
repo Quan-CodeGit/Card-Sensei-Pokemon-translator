@@ -4620,12 +4620,66 @@ function showToast(msg) {
 // ═══════════════════════════════════════════════════
 // INIT
 // ═══════════════════════════════════════════════════
+// ── Background category hydration ─────────────────────────────────────────
+// Fetches full card detail for any deck/box card missing _cat, then re-renders.
+// Runs silently in the background; batched to avoid hammering the API.
+async function hydrateDeckCategories() {
+  // Collect unique card objects that need hydration
+  const seen = new Set()
+  const toHydrate = []
+  for (const dk of decks) {
+    for (const e of dk.cards) {
+      if (!e.card._cat && !seen.has(e.card.id)) { seen.add(e.card.id); toHydrate.push(e.card) }
+    }
+  }
+  for (const e of box) {
+    if (!e.card._cat && !seen.has(e.card.id)) { seen.add(e.card.id); toHydrate.push(e.card) }
+  }
+  if (!toHydrate.length) return
+
+  const BATCH = 4   // parallel requests per wave
+  let anyUpdated = false
+
+  for (let i = 0; i < toHydrate.length; i += BATCH) {
+    await Promise.all(toHydrate.slice(i, i + BATCH).map(async card => {
+      try {
+        const lang = card._lang === 'ja' ? 'ja' : 'en'
+        const r = await fetch(`https://api.tcgdex.net/v2/${lang}/cards/${card.id}`)
+        if (!r.ok) return
+        const d = await r.json()
+        const _cat   = d.category || null
+        const _stage = d.stage    || null
+        const _sub   = d.suffix   || d.trainerType || null
+        if (!_cat) return
+        // Update every copy of this card across all decks and box
+        for (const dk of decks) {
+          for (const e of dk.cards) {
+            if (e.card.id === card.id) { e.card._cat = _cat; e.card._stage = _stage; e.card._sub = _sub }
+          }
+        }
+        for (const e of box) {
+          if (e.card.id === card.id) { e.card._cat = _cat; e.card._stage = _stage; e.card._sub = _sub }
+        }
+        anyUpdated = true
+      } catch { /* silent — network issues shouldn't crash the panel */ }
+    }))
+    // Small pause between batches so we don't hammer TCGdex
+    if (i + BATCH < toHydrate.length) await new Promise(r => setTimeout(r, 150))
+  }
+
+  if (anyUpdated) {
+    saveDecks()
+    renderDeckPanel()
+  }
+}
+
 document.getElementById('mode-scan').style.display = 'none'
 syncDeck()
 renderDeckPanel()
 checkShareHash()
 initTypeFilterChips()   // build energy type filter chips using real SVG icons
 initAllSets()           // fetch all 230+ sets and populate expansion dropdown with optgroups
+hydrateDeckCategories() // background-fill _cat/_stage/_sub for cards missing it
 document.getElementById('search-input').focus()
 
 // Prefetch example chips — only runs ONCE, triggered by first user interaction.
