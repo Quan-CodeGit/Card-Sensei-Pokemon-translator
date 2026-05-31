@@ -1042,6 +1042,18 @@ footer {
   grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
   gap: 0.625rem;
 }
+/* Group header inside viewer grid — spans all columns */
+.viewer-group-header {
+  grid-column: 1 / -1;
+  font-size: 0.62rem; font-family: var(--font-mono); font-weight: 600;
+  letter-spacing: 0.07em; text-transform: uppercase;
+  color: rgba(238,238,238,0.4);
+  padding: 0.5rem 0.25rem 0.15rem;
+  border-top: 1px solid rgba(255,255,255,0.08);
+  margin-top: 0.2rem;
+}
+.viewer-group-header:first-child { border-top: none; margin-top: 0; padding-top: 0; }
+
 .viewer-card {
   border-radius: 0.625rem; overflow: hidden; background: #3A4750;
   cursor: pointer; position: relative;
@@ -3715,6 +3727,7 @@ function openBuilder() {
       <div class="builder-tabs" id="builder-tabs"></div>
       <button class="builder-tab-add" onclick="createNewDeck()" title="New deck">+ New</button>
       <div style="flex-shrink:0;display:flex;gap:0.5rem;margin-left:0.5rem">
+        <button class="btn-ghost" onclick="closeBuilder();openViewer()" style="font-size:0.65rem;padding:0.25rem 0.65rem;border-color:rgba(238,238,238,0.22);color:rgba(238,238,238,0.7)">👁 View</button>
         <button class="btn-ghost" onclick="openDownloadModal()" style="font-size:0.65rem;padding:0.25rem 0.65rem;border-color:rgba(238,238,238,0.22);color:rgba(238,238,238,0.7)">⬇ Download</button>
         <button class="btn-ghost" onclick="openShareModal()" style="font-size:0.65rem;padding:0.25rem 0.65rem;border-color:rgba(238,238,238,0.22);color:rgba(238,238,238,0.7)">🔗 Share</button>
         <button class="btn-gold" onclick="closeBuilder()" style="font-size:0.65rem;padding:0.25rem 0.65rem">✓ Done</button>
@@ -3837,11 +3850,23 @@ function renderBuilderRight() {
     return
   }
 
-  list.innerHTML = d.map(({card, qty}) => {
+  const sorted = [...d].sort(_cmpDeck)
+  let html = ''
+  let lastKey = null
+  for (const {card, qty} of sorted) {
+    const sk       = _deckSortKey(card)
+    const groupKey = `${sk[0]}-${sk[1]}`
+    if (groupKey !== lastKey) {
+      lastKey = groupKey
+      const groupCount = sorted.filter(e => {
+        const k = _deckSortKey(e.card); return k[0] === sk[0] && k[1] === sk[1]
+      }).reduce((s, e) => s + e.qty, 0)
+      html += `<div class="deck-group-header" style="margin:0.3rem 0.25rem 0.1rem">${_groupLabel(sk[0], sk[1], groupCount)}</div>`
+    }
     const imgSrc = card.image ? `${card.image}/low.webp` : null
     const eid    = escAtt(card.id)
     const lang   = escAtt(card._lang || 'en')
-    return `
+    html += `
     <div class="builder-deck-entry"
       onclick="cardClick('${eid}','${lang}',event)"
       onmousedown="startHold(event,'${eid}','${lang}')" onmouseup="cancelHold()" onmouseleave="cancelHold()"
@@ -3859,7 +3884,8 @@ function renderBuilderRight() {
         <button class="builder-entry-btn" onclick="qtyChange('deck','${eid}',1)">+</button>
       </div>
     </div>`
-  }).join('')
+  }
+  list.innerHTML = html
 }
 
 function updateBuilderProgress() {
@@ -4080,7 +4106,10 @@ function openViewer() {
         <div class="viewer-title">${escHtml(deckName)}</div>
         <div class="viewer-subtitle">${total} card${total !== 1 ? 's' : ''} · tap/click to view translation</div>
       </div>
-      <button onclick="closeViewer()" style="color:#fff;font-size:1.25rem;opacity:0.55;padding:0.25rem 0.6rem;border-radius:0.375rem;transition:opacity 0.15s;flex-shrink:0" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.55" aria-label="Close viewer">✕</button>
+      <div style="display:flex;align-items:center;gap:0.5rem;flex-shrink:0">
+        <button onclick="closeViewer();openBuilder()" style="font-size:0.6rem;font-family:var(--font-mono);letter-spacing:0.08em;text-transform:uppercase;color:rgba(255,255,255,0.7);padding:0.22rem 0.6rem;border-radius:0.3rem;border:1px solid rgba(255,255,255,0.22);transition:all 0.15s" onmouseover="this.style.borderColor='rgba(215,35,35,0.7)';this.style.color='#fff'" onmouseout="this.style.borderColor='rgba(255,255,255,0.22)';this.style.color='rgba(255,255,255,0.7)'">BUILD →</button>
+        <button onclick="closeViewer()" style="color:#fff;font-size:1.25rem;opacity:0.55;padding:0.25rem 0.6rem;border-radius:0.375rem;transition:opacity 0.15s" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.55" aria-label="Close viewer">✕</button>
+      </div>
     </div>
     <div class="viewer-body">
       <div class="viewer-grid" id="viewer-grid"></div>
@@ -4097,12 +4126,23 @@ function closeViewer() {
 function renderViewerGrid() {
   const grid = document.getElementById('viewer-grid')
   if (!grid) return
-  const d = getDeck()
-  grid.innerHTML = d.map(({card, qty}) => {
+  const sorted = [...getDeck()].sort(_cmpDeck)
+  let html = ''
+  let lastKey = null
+  for (const {card, qty} of sorted) {
+    const sk       = _deckSortKey(card)
+    const groupKey = `${sk[0]}-${sk[1]}`
+    if (groupKey !== lastKey) {
+      lastKey = groupKey
+      const groupCount = sorted.filter(e => {
+        const k = _deckSortKey(e.card); return k[0] === sk[0] && k[1] === sk[1]
+      }).reduce((s, e) => s + e.qty, 0)
+      html += `<div class="viewer-group-header">${_groupLabel(sk[0], sk[1], groupCount)}</div>`
+    }
     const imgSrc = card.image ? card.image + '/low.webp' : null
     const eid    = escAtt(card.id)
     const lang   = escAtt(card._lang || 'en')
-    return `
+    html += `
     <div class="viewer-card" onclick="openViewerCard('${eid}','${lang}')">
       <div class="viewer-card-img">
         ${imgSrc
@@ -4114,7 +4154,8 @@ function renderViewerGrid() {
         <div class="viewer-card-name">${escHtml(card.name)}</div>
       </div>
     </div>`
-  }).join('')
+  }
+  grid.innerHTML = html
 }
 
 async function openViewerCard(cardId, lang) {
