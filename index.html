@@ -2483,7 +2483,8 @@ function renderModal({ ja, en, id, primaryCard, sourceLang }) {
   const boxQty    = boxEntry?.qty  ?? 0
   const deckTotal = deck.reduce((s,e)=>s+e.qty, 0)
   const deckFull  = deckTotal >= 60
-  const maxCopies = deckQty >= 4
+  const isBasicEnergy = _cat === 'Energy' && isBasicEnergyCard(primary.name)
+  const maxCopies = !isBasicEnergy && deckQty >= 4
 
   // Extract category/stage/subtype from full card detail so deck entries can sort correctly
   const _cat        = primary.category   || null   // 'Pokemon' | 'Trainer' | 'Energy'
@@ -2621,7 +2622,8 @@ function qtyChange(target, cardId, delta) {
       // ── Guard: deck limits ──
       const total = d.reduce((s,e)=>s+e.qty, 0)
       if (total >= 60)      { showToast('Deck is full (60/60)'); return }
-      if (curDkQty >= 4)    { showToast('Max 4 copies per card'); return }
+      const _isBasicEnergy = card._cat === 'Energy' && isBasicEnergyCard(card.name)
+      if (!_isBasicEnergy && curDkQty >= 4) { showToast('Max 4 copies per card'); return }
       // ── Auto-add to box if deckQty would exceed boxQty ──
       // (You can't play a card you don't own)
       if (curDkQty >= curBoxQty) {
@@ -2701,7 +2703,8 @@ function refreshModalQty() {
   if (bEl) bEl.textContent = boxQty
   if (pEl) {
     const total = getDeck().reduce((s,e)=>s+e.qty, 0)
-    pEl.disabled = total >= 60 || deckQty >= 4
+    const _isBasicEnergy = modalCardData._cat === 'Energy' && isBasicEnergyCard(modalCardData.name)
+    pEl.disabled = total >= 60 || (!_isBasicEnergy && deckQty >= 4)
     // Note: we no longer block on boxQty — adding to deck auto-adds to box
   }
 }
