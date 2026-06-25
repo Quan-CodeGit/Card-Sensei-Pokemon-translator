@@ -1209,6 +1209,20 @@ footer {
         onmouseout="this.style.borderColor='rgba(255,255,255,0.25)';this.style.color='rgba(255,255,255,0.65)'">
         <span id="refresh-icon" style="font-size:0.8rem">↻</span> Refresh
       </button>
+      <button id="fullscreen-btn" onclick="toggleFullscreen()" title="Toggle fullscreen"
+        style="display:flex;align-items:center;justify-content:center;width:30px;height:30px;
+               border-radius:8px;border:1px solid rgba(255,255,255,0.25);
+               color:rgba(255,255,255,0.65);background:transparent;
+               transition:all 0.18s;padding:0;cursor:pointer"
+        onmouseover="this.style.borderColor='rgba(255,255,255,0.7)';this.style.color='#fff'"
+        onmouseout="this.style.borderColor='rgba(255,255,255,0.25)';this.style.color='rgba(255,255,255,0.65)'">
+        <svg id="fs-icon-expand" width="16" height="16" viewBox="0 0 16 16" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+          <path d="M1.5 1.5h4v1.5h-2.5v2.5h-1.5v-4zm9 0h4v4h-1.5v-2.5h-2.5v-1.5zm-9 9h1.5v2.5h2.5v1.5h-4v-4zm11.5 2.5v-2.5h1.5v4h-4v-1.5h2.5z"/>
+        </svg>
+        <svg id="fs-icon-shrink" width="16" height="16" viewBox="0 0 16 16" fill="currentColor" xmlns="http://www.w3.org/2000/svg" style="display:none">
+          <path d="M5.5 1.5v2.5h-2.5v1.5h4v-4h-1.5zm5 0v4h4v-1.5h-2.5v-2.5h-1.5zm-5 9h-4v1.5h2.5v2.5h1.5v-4zm6.5 1.5h-2.5v2.5h-1.5v-4h4v1.5z"/>
+        </svg>
+      </button>
     </div>
   </div>
 </header>
@@ -3639,6 +3653,21 @@ function lsDetailSet(id, data) {
 // ═══════════════════════════════════════════════════
 // CACHE REFRESH
 // ═══════════════════════════════════════════════════
+function toggleFullscreen() {
+  if (!document.fullscreenElement) {
+    document.documentElement.requestFullscreen().catch(() => {})
+  } else {
+    document.exitFullscreen().catch(() => {})
+  }
+}
+document.addEventListener('fullscreenchange', () => {
+  const isFs = !!document.fullscreenElement
+  const expand = document.getElementById('fs-icon-expand')
+  const shrink = document.getElementById('fs-icon-shrink')
+  if (expand) expand.style.display = isFs ? 'none' : ''
+  if (shrink) shrink.style.display = isFs ? '' : 'none'
+})
+
 function clearCache() {
   // Spin the icon while working
   const icon = document.getElementById('refresh-icon')
