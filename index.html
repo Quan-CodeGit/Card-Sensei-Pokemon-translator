@@ -1502,6 +1502,7 @@ footer {
           <span class="deck-count" id="deck-count-badge">0/60</span>
           <button onclick="openViewer()" style="font-size:0.58rem;font-family:var(--font-mono);letter-spacing:0.1em;text-transform:uppercase;color:rgba(238,238,238,0.7);padding:0.2rem 0.5rem;border-radius:0.3rem;border:1px solid rgba(238,238,238,0.2);transition:all 0.15s" onmouseover="this.style.borderColor='rgba(215,35,35,0.6)';this.style.color='#fff'" onmouseout="this.style.borderColor='rgba(238,238,238,0.2)';this.style.color='rgba(238,238,238,0.7)'">VIEW →</button>
           <button onclick="openBuilder()" style="font-size:0.58rem;font-family:var(--font-mono);letter-spacing:0.1em;text-transform:uppercase;color:rgba(238,238,238,0.7);padding:0.2rem 0.5rem;border-radius:0.3rem;border:1px solid rgba(238,238,238,0.2);transition:all 0.15s" onmouseover="this.style.borderColor='rgba(215,35,35,0.6)';this.style.color='#fff'" onmouseout="this.style.borderColor='rgba(238,238,238,0.2)';this.style.color='rgba(238,238,238,0.7)'">BUILD →</button>
+          <button onclick="duplicateActiveDeck()" title="Duplicate deck" style="font-size:0.58rem;font-family:var(--font-mono);letter-spacing:0.1em;text-transform:uppercase;color:rgba(238,238,238,0.7);padding:0.2rem 0.5rem;border-radius:0.3rem;border:1px solid rgba(238,238,238,0.2);transition:all 0.15s" onmouseover="this.style.borderColor='rgba(215,35,35,0.6)';this.style.color='#fff'" onmouseout="this.style.borderColor='rgba(238,238,238,0.2)';this.style.color='rgba(238,238,238,0.7)'">⧉</button>
           <button onclick="openDownloadModal()" title="Download deck" style="font-size:0.58rem;font-family:var(--font-mono);letter-spacing:0.1em;text-transform:uppercase;color:rgba(238,238,238,0.7);padding:0.2rem 0.5rem;border-radius:0.3rem;border:1px solid rgba(238,238,238,0.2);transition:all 0.15s" onmouseover="this.style.borderColor='rgba(215,35,35,0.6)';this.style.color='#fff'" onmouseout="this.style.borderColor='rgba(238,238,238,0.2)';this.style.color='rgba(238,238,238,0.7)'">⬇</button>
         </div>
       </div>
@@ -3744,6 +3745,31 @@ function renameDeck(val) {
   renderBuilderTabs()
 }
 
+function duplicateActiveDeck() {
+  const src = getActiveDeck()
+  if (!src) return
+  // Build a non-colliding name: "X (copy)", "X (copy 2)", ...
+  const existingNames = new Set(decks.map(d => d.name))
+  let name = `${src.name} (copy)`
+  let n = 2
+  while (existingNames.has(name)) { name = `${src.name} (copy ${n++})` }
+  // Deep-copy entries so qty changes are independent; card objects are immutable so ref-copy is fine
+  const cards = src.cards.map(e => ({ card: e.card, qty: e.qty }))
+  const nd = { id: uid(), name, cards }
+  decks.push(nd)
+  activeDeckId = nd.id
+  saveDecks()
+  renderDeckPanel()
+  if (document.getElementById('builder-root')?.firstChild) {
+    renderBuilderTabs()
+    renderBuilderRight()
+    const inp = document.getElementById('db-deck-name')
+    if (inp) inp.value = name
+    updateBuilderProgress()
+  }
+  showToast(`🗐 Duplicated as "${name}"`)
+}
+
 function clearActiveDeck() {
   if (!confirm('Clear all cards from this deck?')) return
   getActiveDeck().cards = []
@@ -3795,6 +3821,7 @@ function openBuilder() {
               onchange="renameDeck(this.value)" placeholder="Deck name…">
             <div class="builder-col-meta" id="db-deck-count">0/60</div>
           </div>
+          <button onclick="duplicateActiveDeck()" title="Duplicate deck" style="font-size:0.85rem;color:var(--text-secondary);padding:0.2rem 0.35rem;border-radius:0.2rem;transition:color 0.15s" onmouseover="this.style.color='var(--gold)'" onmouseout="this.style.color='var(--text-secondary)'">⧉</button>
           <button onclick="clearActiveDeck()" title="Clear deck" style="font-size:0.85rem;color:var(--text-secondary);padding:0.2rem 0.35rem;border-radius:0.2rem;transition:color 0.15s" onmouseover="this.style.color='var(--red)'" onmouseout="this.style.color='var(--text-secondary)'">🗑</button>
         </div>
         <div class="builder-deck-list" id="db-deck-list"
