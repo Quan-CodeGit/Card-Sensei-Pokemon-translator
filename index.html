@@ -4632,18 +4632,87 @@ function openShareModal() {
 
 function closeShareModal() { document.getElementById('share-overlay')?.remove() }
 
-function copyShareLink() {
+// ── Image URL reconstruction from card ID ─────────────
+function _setIdToSeries(setId) {
+  const s = (setId || '').toLowerCase()
+  if (/^g\d/.test(s))     return 'xy'   // g1, g2 gym sets are in XY series
+  if (s.startsWith('sv'))   return 'sv'
+  if (s.startsWith('swsh')) return 'swsh'
+  if (s.startsWith('sm'))   return 'sm'
+  if (s.startsWith('xy'))   return 'xy'
+  if (s.startsWith('bw'))   return 'bw'
+  if (s.startsWith('dp'))   return 'dp'
+  if (s.startsWith('hgss')) return 'hgss'
+  if (s.startsWith('me'))   return 'me'
+  if (s.startsWith('pop'))  return 'pop'
+  return null
+}
+function cardImageFromId(cardId, lang) {
+  const dash = (cardId || '').lastIndexOf('-')
+  if (dash === -1) return null
+  const setId  = cardId.slice(0, dash)
+  const localId = cardId.slice(dash + 1)
+  const series = _setIdToSeries(setId)
+  if (!series) return null
+  return `https://assets.tcgdex.net/${lang || 'en'}/${series}/${setId}/${localId}`
+}
+
+// ── Compressed share encoding (v2) ──────────────────
+// Compress JSON with deflate-raw → base64url (no % escaping needed in URLs)
+async function _encodeV2(obj) {
+  const json = JSON.stringify(obj)
+  const bytes = new TextEncoder().encode(json)
+  const cs = new CompressionStream('deflate-raw')
+  const w = cs.writable.getWriter()
+  w.write(bytes); w.close()
+  const buf = await new Response(cs.readable).arrayBuffer()
+  return btoa(String.fromCharCode(...new Uint8Array(buf)))
+    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+}
+
+// Decompress base64url → JSON (v2), falls back to old plain-base64 format
+async function _decodeV2(raw) {
+  // New format: base64url, no % signs
+  const b64 = raw.replace(/-/g, '+').replace(/_/g, '/')
+  const pad  = b64.length % 4 ? '='.repeat(4 - b64.length % 4) : ''
+  const bytes = Uint8Array.from(atob(b64 + pad), c => c.charCodeAt(0))
+  const ds = new DecompressionStream('deflate-raw')
+  const w  = ds.writable.getWriter()
+  w.write(bytes); w.close()
+  const buf = await new Response(ds.readable).arrayBuffer()
+  return JSON.parse(new TextDecoder().decode(buf))
+}
+
+// Old format decoder (legacy links)
+function _decodeLegacy(raw) {
+  const cleaned = decodeURIComponent(raw)
+  return JSON.parse(decodeURIComponent(escape(atob(cleaned))))
+}
+
+async function copyShareLink() {
   const checks = [...document.querySelectorAll('.share-deck-check:checked')]
   if (!checks.length) { showToast('Select at least one deck'); return }
   const ids = new Set(checks.map(el => el.dataset.deckId))
   const selected = decks.filter(d => ids.has(d.id))
   const payloads = selected.map(d => ({
     n: d.name,
-    c: d.cards.map(e => ({ i:e.card.id, q:e.qty, n:e.card.name, img:e.card.image, li:e.card.localId, la:e.card._lang, s:e.card.set }))
+    c: d.cards.map(e => {
+      const o = { i: e.card.id, q: e.qty, n: e.card.name }
+      if (e.card._lang && e.card._lang !== 'en') o.la = e.card._lang
+      return o
+    })
   }))
   try {
-    const encoded = encodeURIComponent(btoa(unescape(encodeURIComponent(JSON.stringify(payloads)))))
-    const url = window.location.href.split('#')[0] + '#decks=' + encoded
+    let encoded, fragment
+    if (typeof CompressionStream !== 'undefined') {
+      encoded  = await _encodeV2(payloads)
+      fragment = '#v2=' + encoded
+    } else {
+      // Fallback for very old browsers: plain base64
+      encoded  = encodeURIComponent(btoa(unescape(encodeURIComponent(JSON.stringify(payloads)))))
+      fragment = '#decks=' + encoded
+    }
+    const url   = window.location.href.split('#')[0] + fragment
     const label = `${selected.length} deck${selected.length>1?'s':''}`
     if (navigator.clipboard?.writeText) {
       navigator.clipboard.writeText(url)
@@ -4652,45 +4721,19 @@ function copyShareLink() {
     } else {
       prompt('Copy this share link:', url); closeShareModal()
     }
-  } catch { showToast('Failed to generate share link') }
+  } catch(e) { console.error(e); showToast('Failed to generate share link') }
 }
 
 // ── Import shared decks ──────────────────────────────
-function _decodePayload(b64) {
-  // Support both plain base64 and URL-percent-encoded base64
-  const cleaned = decodeURIComponent(b64)
-  return JSON.parse(decodeURIComponent(escape(atob(cleaned))))
-}
-
-function checkShareHash() {
-  const hash = window.location.hash
-  let payloads = []
-
-  try {
-    if (hash.startsWith('#deck=')) {
-      // Legacy single-deck format
-      const p = _decodePayload(hash.slice(6))
-      if (p?.n && Array.isArray(p?.c)) payloads = [p]
-    } else if (hash.startsWith('#decks=')) {
-      // Multi-deck format
-      const arr = _decodePayload(hash.slice(7))
-      if (Array.isArray(arr)) payloads = arr.filter(p => p?.n && Array.isArray(p?.c))
-    }
-  } catch(e) { console.warn('Share hash parse error:', e) }
-
-  if (!payloads.length) return
-
-  // Clear hash from URL immediately
-  window.history.replaceState(null, '', window.location.href.split('#')[0])
-
-  // Auto-import — no hidden banner needed
+function _importPayloads(payloads) {
   const totalCards = payloads.reduce((s,p)=>s+p.c.reduce((ss,c)=>ss+c.q,0),0)
   payloads.forEach(p => {
-    const cards = p.c.map(c => ({
-      card: { id:c.i, name:c.n, image:c.img, localId:c.li, _lang:c.la||'en', set:c.s },
-      qty: c.q
-    }))
-    // Avoid duplicating if same deck name already exists
+    const cards = p.c.map(c => {
+      const lang    = c.la || 'en'
+      const localId = c.li || c.i.slice(c.i.lastIndexOf('-') + 1)
+      const image   = c.img || cardImageFromId(c.i, lang)
+      return { card: { id:c.i, name:c.n, image, localId, _lang:lang, set:c.s||null }, qty: c.q }
+    })
     const label = p.n.endsWith(' (shared)') ? p.n : p.n + ' (shared)'
     decks.push({ id: uid(), name: label, cards })
   })
@@ -4699,6 +4742,31 @@ function checkShareHash() {
   renderDeckPanel()
   const deckNames = payloads.map(p=>p.n).join(', ')
   showToast(`🃏 Imported "${deckNames}" — ${totalCards} card${totalCards!==1?'s':''}`)
+}
+
+async function checkShareHash() {
+  const hash = window.location.hash
+  if (!hash || hash === '#') return
+  let payloads = []
+
+  try {
+    if (hash.startsWith('#v2=')) {
+      // New compressed format
+      const arr = await _decodeV2(hash.slice(4))
+      if (Array.isArray(arr)) payloads = arr.filter(p => p?.n && Array.isArray(p?.c))
+      else if (arr?.n && Array.isArray(arr?.c)) payloads = [arr]
+    } else if (hash.startsWith('#decks=')) {
+      const arr = _decodeLegacy(hash.slice(7))
+      if (Array.isArray(arr)) payloads = arr.filter(p => p?.n && Array.isArray(p?.c))
+    } else if (hash.startsWith('#deck=')) {
+      const p = _decodeLegacy(hash.slice(6))
+      if (p?.n && Array.isArray(p?.c)) payloads = [p]
+    }
+  } catch(e) { console.warn('Share hash parse error:', e) }
+
+  if (!payloads.length) return
+  window.history.replaceState(null, '', window.location.href.split('#')[0])
+  _importPayloads(payloads)
 }
 
 function importDecks() { /* no-op — auto-import handled by checkShareHash */ }
@@ -4792,7 +4860,7 @@ async function hydrateDeckCategories() {
 document.getElementById('mode-scan').style.display = 'none'
 syncDeck()
 renderDeckPanel()
-checkShareHash()
+;(async () => { await checkShareHash() })()
 initTypeFilterChips()   // build energy type filter chips using real SVG icons
 initAllSets()           // fetch all 230+ sets and populate expansion dropdown with optgroups
 hydrateDeckCategories() // background-fill _cat/_stage/_sub for cards missing it
