@@ -4742,6 +4742,8 @@ function _importPayloads(payloads) {
   renderDeckPanel()
   const deckNames = payloads.map(p=>p.n).join(', ')
   showToast(`🃏 Imported "${deckNames}" — ${totalCards} card${totalCards!==1?'s':''}`)
+  // Hydrate _cat/_stage/_sub for imported cards (async import runs after startup hydration)
+  hydrateDeckCategories()
 }
 
 async function checkShareHash() {
