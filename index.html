@@ -2427,26 +2427,93 @@ async function _fetchCardJSON(url, { attempts = 3, timeoutMs = 8000 } = {}) {
 }
 
 async function openModal(id, lang) {
-  // ── 1. Memory cache hit → instant render, no spinner ──────────────────
+  // ── 1. Full cache hit → instant render ─────────────────────────────────
   if (cardDetailCache.has(id)) {
     const { ja, en } = cardDetailCache.get(id)
-    const primaryCard = lang === 'en' ? (en ?? ja) : (ja ?? en)
-    renderModal({ ja, en, id, primaryCard, sourceLang: lang })
+    renderModal({ ja, en, id, primaryCard: lang==='en'?(en??ja):(ja??en), sourceLang: lang })
     return
   }
-  // ── 2. localStorage cache hit → instant render, no spinner ─────────────
   const persisted = lsDetailGet(id)
   if (persisted) {
     cardDetailCache.set(id, persisted)
     const { ja, en } = persisted
-    const primaryCard = lang === 'en' ? (en ?? ja) : (ja ?? en)
-    renderModal({ ja, en, id, primaryCard, sourceLang: lang })
+    renderModal({ ja, en, id, primaryCard: lang==='en'?(en??ja):(ja??en), sourceLang: lang })
     return
   }
 
-  // ── 3. Show spinner while fetching ─────────────────────────────────────
-  const root = document.getElementById('modal-root')
-  root.innerHTML = `
+  // ── 2. Show card image immediately from brief data ──────────────────────
+  // Card image + qty controls appear at once; translation loads in background.
+  const root  = document.getElementById('modal-root')
+  const brief = cardDataStore.get(id)
+    || getDeck().find(e => e.card.id === id)?.card
+    || box.find(e => e.card.id === id)?.card
+
+  if (brief) {
+    modalCardData = brief
+    const dkQty    = deck.find(e=>e.card.id===id)?.qty ?? 0
+    const bxQty    = box.find(e=>e.card.id===id)?.qty  ?? 0
+    const dkTotal  = deck.reduce((s,e)=>s+e.qty, 0)
+    const isBasicEn= brief._cat === 'Energy' && isBasicEnergyCard(brief.name)
+    const plusDis  = (dkTotal>=60 || (!isBasicEn && dkQty>=4)) ? 'disabled' : ''
+    const imgHigh  = brief.image ? `${brief.image}/high.webp` : null
+    root.innerHTML = `
+    <div class="modal-overlay" id="modal-overlay" onclick="maybeCloseModal(event)">
+      <div class="modal-box" id="modal-box">
+        <div class="modal-header">
+          <div class="modal-title-area">
+            ${brief._cat?`<span class="cat-badge">${escHtml(brief._cat)}</span>`:''}
+            <span class="modal-card-id">${escHtml(id)}</span>
+          </div>
+          <button class="modal-close" onclick="closeModal()">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="modal-grid">
+            <div class="modal-img-col">
+              <div class="modal-card-img holo-card">
+                ${imgHigh
+                  ? `<img src="${escAtt(imgHigh)}" alt="${escHtml(brief.name)}"
+                      onerror="this.style.display='none'"
+                      style="opacity:0;transition:opacity 0.4s" onload="this.style.opacity=1">`
+                  : `<span style="font-size:3rem;opacity:0.2">🃏</span>`}
+              </div>
+              <div class="modal-meta">
+                <div class="modal-meta-row"><span class="mml">Name</span><span class="mmv">${escHtml(brief.name)}</span></div>
+                ${brief.localId?`<div class="modal-meta-row"><span class="mml">Card #</span><span class="mmv">${escHtml(brief.localId)}</span></div>`:''}
+              </div>
+              <div style="width:100%">
+                <div style="display:flex;gap:1.25rem;align-items:flex-end">
+                  <div style="display:flex;flex-direction:column;gap:0.3rem">
+                    <span style="font-size:0.58rem;font-family:var(--font-mono);color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.08em">Deck</span>
+                    <div style="display:flex;align-items:center;gap:0.3rem">
+                      <button class="btn-ghost" id="btn-deck-minus" onclick="modalQtyChange('deck',-1)" style="width:34px;height:34px;padding:0;display:flex;align-items:center;justify-content:center;font-size:1.1rem">−</button>
+                      <span id="modal-deck-qty" style="min-width:28px;text-align:center;font-family:var(--font-mono);font-weight:700;font-size:1rem;color:var(--red)">${dkQty}</span>
+                      <button class="btn-gold" id="btn-deck-plus" onclick="modalQtyChange('deck',1)" style="width:34px;height:34px;padding:0;display:flex;align-items:center;justify-content:center;font-size:1.1rem" ${plusDis}>+</button>
+                    </div>
+                  </div>
+                  <div style="display:flex;flex-direction:column;gap:0.3rem">
+                    <span style="font-size:0.58rem;font-family:var(--font-mono);color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.08em">Box</span>
+                    <div style="display:flex;align-items:center;gap:0.3rem">
+                      <button class="btn-ghost" onclick="modalQtyChange('box',-1)" style="width:34px;height:34px;padding:0;display:flex;align-items:center;justify-content:center;font-size:1.1rem">−</button>
+                      <span id="modal-box-qty" style="min-width:28px;text-align:center;font-family:var(--font-mono);font-weight:700;font-size:1rem;color:var(--dark)">${bxQty}</span>
+                      <button class="btn-blue" onclick="modalQtyChange('box',1)" style="width:34px;height:34px;padding:0;display:flex;align-items:center;justify-content:center;font-size:1.1rem">+</button>
+                    </div>
+                  </div>
+                </div>
+                <div id="modal-feedback" style="margin-top:0.5rem"></div>
+              </div>
+            </div>
+            <div class="modal-right" id="modal-translation-panel">
+              <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:1rem;opacity:0.55">
+                <div class="spinner"></div>
+                <p style="font-size:0.8rem;font-family:var(--font-mono);color:var(--text-secondary)">Loading translation…</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>`
+  } else {
+    root.innerHTML = `
     <div class="modal-overlay" onclick="maybeCloseModal(event)">
       <div class="modal-box" style="padding:3rem;display:flex;align-items:center;justify-content:center">
         <div style="display:flex;flex-direction:column;align-items:center;gap:1rem">
@@ -2455,13 +2522,12 @@ async function openModal(id, lang) {
         </div>
       </div>
     </div>`
+  }
   document.body.style.overflow = 'hidden'
 
+  // ── 3. Fetch full translation data ──────────────────────────────────────
   try {
     let ja = null, en = null
-
-    // EN card IDs (e.g. sv09-001) → fetch EN first, then set-map for JA
-    // JA card IDs (e.g. SV9-001)  → fetch JA first, then set-map for EN
     if (lang === 'en') {
       en = await _fetchCardJSON(`https://api.tcgdex.net/v2/en/cards/${encodeURIComponent(id)}`)
       if (en) {
@@ -2475,28 +2541,38 @@ async function openModal(id, lang) {
         if (enId) en = await _fetchCardJSON(`https://api.tcgdex.net/v2/en/cards/${encodeURIComponent(enId)}`).catch(()=>null)
       }
     }
-
     if (!ja && !en) throw new Error('not-found')
 
     cardDetailCache.set(id, { ja, en })
     lsDetailSet(id, { ja, en })
-
-    const primaryCard = lang === 'en' ? (en ?? ja) : (ja ?? en)
-    renderModal({ ja, en, id, primaryCard, sourceLang: lang })
+    renderModal({ ja, en, id, primaryCard: lang==='en'?(en??ja):(ja??en), sourceLang: lang })
   } catch(err) {
     const notFound = err?.message === 'not-found'
     const eid = escAtt(id), elang = escAtt(lang)
-    root.innerHTML = `
+    const errContent = `
+      <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:0.75rem;text-align:center;padding:1.5rem">
+        <p style="color:#ff8888;font-weight:600;font-size:0.9rem">${notFound ? 'Card not in database.' : 'Translation unavailable.'}</p>
+        <p style="font-size:0.75rem;color:var(--text-secondary);max-width:220px">${notFound
+          ? 'This card may not be in TCGdex yet.'
+          : 'Could not reach the card database. You can still add this card to your deck.'}</p>
+        ${notFound ? '' : `<button class="btn-ghost" style="margin-top:0.25rem;font-size:0.72rem" onclick="openModal('${eid}','${elang}')">↻ Retry translation</button>`}
+      </div>`
+    const panel = document.getElementById('modal-translation-panel')
+    if (panel) {
+      panel.innerHTML = errContent   // card image + qty controls stay visible
+    } else {
+      root.innerHTML = `
       <div class="modal-overlay" onclick="maybeCloseModal(event)">
         <div class="modal-box" style="padding:2rem;max-width:400px;text-align:center">
           <p style="color:#ff8888;margin-bottom:0.5rem;font-weight:600">${notFound ? 'Card not found.' : 'Failed to load card.'}</p>
-          <p style="font-size:0.75rem;color:var(--text-secondary);margin-bottom:1.25rem">${notFound ? 'This card may not be in the TCGdex database yet.' : 'Check your connection and try again.'}</p>
+          <p style="font-size:0.75rem;color:var(--text-secondary);margin-bottom:1.25rem">${notFound ? 'This card may not be in TCGdex yet.' : 'Check your connection and try again.'}</p>
           <div style="display:flex;gap:0.5rem;justify-content:center">
             ${notFound ? '' : `<button class="btn-ghost" onclick="openModal('${eid}','${elang}')">↻ Try Again</button>`}
             <button class="btn-ghost" onclick="closeModal()">Close</button>
           </div>
         </div>
       </div>`
+    }
   }
 }
 
