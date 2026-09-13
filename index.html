@@ -2551,11 +2551,11 @@ async function openModal(id, lang) {
     const eid = escAtt(id), elang = escAtt(lang)
     const errContent = `
       <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:0.75rem;text-align:center;padding:1.5rem">
-        <p style="color:#ff8888;font-weight:600;font-size:0.9rem">${notFound ? 'Card not in database.' : 'Translation unavailable.'}</p>
+        <p style="color:#ff8888;font-weight:600;font-size:0.9rem">${notFound ? 'Card not in database.' : 'Could not load card details.'}</p>
         <p style="font-size:0.75rem;color:var(--text-secondary);max-width:220px">${notFound
           ? 'This card may not be in TCGdex yet.'
-          : 'Could not reach the card database. You can still add this card to your deck.'}</p>
-        ${notFound ? '' : `<button class="btn-ghost" style="margin-top:0.25rem;font-size:0.72rem" onclick="openModal('${eid}','${elang}')">↻ Retry translation</button>`}
+          : 'The card database is not reachable right now. You can still add this card to your deck.'}</p>
+        ${notFound ? '' : `<button class="btn-ghost" style="margin-top:0.25rem;font-size:0.72rem" onclick="openModal('${eid}','${elang}')">↻ Retry</button>`}
       </div>`
     const panel = document.getElementById('modal-translation-panel')
     if (panel) {
