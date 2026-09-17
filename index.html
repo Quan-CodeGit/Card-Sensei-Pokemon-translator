@@ -2593,14 +2593,13 @@ function renderModal({ ja, en, id, primaryCard, sourceLang }) {
   const boxQty    = boxEntry?.qty  ?? 0
   const deckTotal = deck.reduce((s,e)=>s+e.qty, 0)
   const deckFull  = deckTotal >= 60
-  const isBasicEnergy = _cat === 'Energy' && isBasicEnergyCard(primary.name)
-  const maxCopies = !isBasicEnergy && deckQty >= 4
-
   // Extract category/stage/subtype from full card detail so deck entries can sort correctly
   const _cat        = primary.category   || null   // 'Pokemon' | 'Trainer' | 'Energy'
   const _stage      = primary.stage      || null   // 'Basic' | 'Stage1' | 'Stage2'
   const _sub        = primary.suffix || primary.trainerType || primary.type || null  // 'Supporter'|'Item'|'Tool'|'Stadium'
   const _evolvesFrom= primary.evolvesFrom || null  // secondary-layer: if set, card is ≥ Stage 1
+  const isBasicEnergy = _cat === 'Energy' && isBasicEnergyCard(primary.name)
+  const maxCopies = !isBasicEnergy && deckQty >= 4
 
   const briefCard = {
     id, name: primary.name, image: imgBase,
