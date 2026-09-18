@@ -1084,19 +1084,18 @@ footer {
 /* Filmstrip mode overrides */
 .viewer-mode-filmstrip .viewer-body { overflow: hidden; padding: 0; display: flex; align-items: center; }
 .viewer-mode-filmstrip .viewer-grid {
-  flex-direction: row; align-items: flex-start;
+  display: grid;
+  grid-template-rows: repeat(2, auto);
+  grid-auto-flow: column;
+  grid-auto-columns: max(130px, calc((100vw - 4rem - 8 * 0.65rem) / 8));
   overflow-x: auto; overflow-y: hidden;
-  gap: 0.75rem; padding: 1.5rem 1.5rem;
+  gap: 0.65rem; padding: 1.25rem 1.5rem;
   width: 100%;
   scrollbar-width: thin; scrollbar-color: rgba(215,35,35,0.45) transparent;
 }
 .viewer-mode-filmstrip .viewer-grid::-webkit-scrollbar { height: 5px; }
 .viewer-mode-filmstrip .viewer-grid::-webkit-scrollbar-track { background: transparent; }
 .viewer-mode-filmstrip .viewer-grid::-webkit-scrollbar-thumb { background: rgba(215,35,35,0.45); border-radius: 99px; }
-.viewer-mode-filmstrip .viewer-card {
-  flex-shrink: 0;
-  width: max(150px, calc((100vw - 4rem - 7 * 0.75rem) / 8));
-}
 
 /* Viewer translation panel (full-screen overlay) */
 .viewer-trans-overlay {
