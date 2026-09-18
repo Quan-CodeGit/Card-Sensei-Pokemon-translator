@@ -4596,9 +4596,12 @@ async function downloadDeckPng() {
   const cards = [...deck.cards].sort(_cmpDeck)
   const total = cards.reduce((s, e) => s + e.qty, 0)
   const N = cards.length
-  // Single horizontal row — wide image (zoom on phone)
-  const W = PAD * 2 + N * (CW + GAP) - GAP
-  const H = HEADER_H + PAD + CH + NAME_H + PAD
+  // 2-row layout: cards flow top→bottom per column, then next column
+  const ROWS = 2
+  const COLS = Math.ceil(N / ROWS)
+  const ROW_H = CH + NAME_H + GAP   // height of one row slot (card + name + gap)
+  const W = PAD * 2 + COLS * (CW + GAP) - GAP
+  const H = HEADER_H + PAD + ROWS * ROW_H - GAP + PAD
 
   const canvas = document.createElement('canvas')
   // Physical pixel dimensions = logical × SCALE
@@ -4639,10 +4642,12 @@ async function downloadDeckPng() {
     img.src = (entry.card.image || '') + '/high.webp'
   })))
 
-  // Draw cards — single horizontal row, sorted left-to-right
+  // Draw cards — 2 rows, column-flow (top→bottom first, then next column)
   loaded.forEach(({ img, entry }, i) => {
-    const x = PAD + i * (CW + GAP)
-    const y = HEADER_H + PAD
+    const col = Math.floor(i / ROWS)
+    const row = i % ROWS
+    const x = PAD + col * (CW + GAP)
+    const y = HEADER_H + PAD + row * ROW_H
 
     // Card with rounded corners
     ctx.save()
