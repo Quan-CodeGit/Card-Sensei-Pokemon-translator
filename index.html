@@ -1056,7 +1056,7 @@ footer {
 .viewer-section-line { flex: 1; height: 1px; background: rgba(255,255,255,0.08); }
 .viewer-card-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(max(120px, calc((100vw - 4rem - 7 * 0.65rem) / 8)), 1fr));
   gap: 0.65rem;
 }
 
@@ -1082,16 +1082,21 @@ footer {
   box-shadow: 0 1px 4px rgba(0,0,0,0.3);
 }
 /* Filmstrip mode overrides */
-.viewer-mode-filmstrip .viewer-body { overflow: hidden; padding: 0; align-items: center; display: flex; }
+.viewer-mode-filmstrip .viewer-body { overflow: hidden; padding: 0; display: flex; align-items: center; }
 .viewer-mode-filmstrip .viewer-grid {
-  flex-direction: row; overflow-x: auto; overflow-y: hidden;
-  gap: 0.6rem; padding: 1.25rem 1.5rem; width: 100%; height: 100%;
+  flex-direction: row; align-items: flex-start;
+  overflow-x: auto; overflow-y: hidden;
+  gap: 0.75rem; padding: 1.5rem 1.5rem;
+  width: 100%;
   scrollbar-width: thin; scrollbar-color: rgba(215,35,35,0.45) transparent;
 }
 .viewer-mode-filmstrip .viewer-grid::-webkit-scrollbar { height: 5px; }
 .viewer-mode-filmstrip .viewer-grid::-webkit-scrollbar-track { background: transparent; }
 .viewer-mode-filmstrip .viewer-grid::-webkit-scrollbar-thumb { background: rgba(215,35,35,0.45); border-radius: 99px; }
-.viewer-mode-filmstrip .viewer-card { flex-shrink: 0; width: 130px; }
+.viewer-mode-filmstrip .viewer-card {
+  flex-shrink: 0;
+  width: max(150px, calc((100vw - 4rem - 7 * 0.75rem) / 8));
+}
 
 /* Viewer translation panel (full-screen overlay) */
 .viewer-trans-overlay {
