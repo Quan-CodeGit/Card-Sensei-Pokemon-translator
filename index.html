@@ -1696,12 +1696,17 @@ let modalCardData = null     // set in renderModal, used by qty controls
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2,5) }
 
 let decks = loadLS('cs_decks')
-if (!decks) {
-  const oldCards = loadLS('cs_deck') || []
-  decks = [{ id: 'default', name: 'My Deck', cards: oldCards }]
+if (Array.isArray(decks)) {
+  decks = decks.filter(d => d && d.id && Array.isArray(d.cards))
+  decks.forEach(d => { d.cards = d.cards.filter(e => e?.card?.id && e.qty > 0) })
+}
+if (!Array.isArray(decks) || !decks.length) {
+  const oldCards = loadLS('cs_deck')
+  decks = [{ id: 'default', name: 'My Deck', cards: Array.isArray(oldCards) ? oldCards : [] }]
   saveLS('cs_decks', decks)
 }
-let activeDeckId = loadLS('cs_active_deck_id') || decks[0]?.id || 'default'
+let activeDeckId = loadLS('cs_active_deck_id')
+if (!decks.some(d => d.id === activeDeckId)) activeDeckId = decks[0].id
 
 function getActiveDeck() {
   return decks.find(d => d.id === activeDeckId) || decks[0]
@@ -1720,7 +1725,8 @@ function saveDecks() {
 // backward-compat alias — always points to active deck's cards
 let deck = getDeck()
 
-let box = loadLS('cs_box') || []
+let box = loadLS('cs_box')
+box = Array.isArray(box) ? box.filter(e => e?.card?.id && e.qty > 0) : []
 
 // ═══════════════════════════════════════════════════
 // LAZY LOAD (IntersectionObserver)
@@ -1785,8 +1791,9 @@ document.getElementById('search-input').addEventListener('input', () => {
   }
 
   // Cache hit → render IMMEDIATELY, zero delay, no skeleton flash
-  const hit = getCachedResult(q.toLowerCase() + filterCacheKey())
-  if (hit) { renderSearchResult(q, hit); return }
+  const hitKey = q.toLowerCase() + filterCacheKey()
+  const hit = getCachedResult(hitKey)
+  if (hit) { searchInFlight = hitKey; renderSearchResult(q, hit); return }
 
   // No cache → show skeleton right now so the UI feels responsive,
   // then fire the actual fetch after 150ms of typing silence
@@ -1825,7 +1832,10 @@ function getCachedResult(key) {
 }
 
 /** Render results (or no-results) without touching the skeleton */
+let _renderSeq = 0
+
 async function renderSearchResult(query, merged) {
+  const seq = ++_renderSeq
   clearError()
   hide('empty-state'); hide('no-results'); hide('results-section'); hide('skeleton-section')
   lastSearchResults = merged            // save for client-side re-filtering
@@ -1839,6 +1849,7 @@ async function renderSearchResult(query, merged) {
   if (needsDetailFilter) {
     showSkeleton(true)
     visible = await applySubtypeFilterAsync(visible, filters.subfilter)
+    if (seq !== _renderSeq) return
     showSkeleton(false)
   }
 
@@ -2007,6 +2018,7 @@ async function reapplyClientFilters() {
     if (q || filters.category === 'Energy') { clearTimeout(debounceTimer); doSearch(q) }
     return
   }
+  const seq = ++_renderSeq
   hide('no-results'); hide('results-section')
   let visible = applyClientFilters(lastSearchResults)
 
@@ -2017,6 +2029,7 @@ async function reapplyClientFilters() {
   if (needsDetailFilter) {
     showSkeleton(true)
     visible = await applySubtypeFilterAsync(visible, filters.subfilter)
+    if (seq !== _renderSeq) return
     showSkeleton(false)
   }
 
@@ -2280,6 +2293,7 @@ async function doSearch(query) {
 
   // Mark this as the active search — any older concurrent call will bail when it resolves
   searchInFlight = key
+  ++_renderSeq
 
   clearError()
   hide('empty-state'); hide('no-results'); hide('results-section'); hide('skeleton-section')
@@ -2465,7 +2479,10 @@ async function _fetchCardJSON(url, { attempts = 3, timeoutMs = 8000 } = {}) {
   throw lastErr
 }
 
+let _modalSeq = 0
+
 async function openModal(id, lang) {
+  const seq = ++_modalSeq
   // ── 1. Full cache hit → instant render ─────────────────────────────────
   if (cardDetailCache.has(id)) {
     const { ja, en } = cardDetailCache.get(id)
@@ -2584,8 +2601,10 @@ async function openModal(id, lang) {
 
     cardDetailCache.set(id, { ja, en })
     lsDetailSet(id, { ja, en })
+    if (seq !== _modalSeq) return   // modal was closed or another card opened meanwhile
     renderModal({ ja, en, id, primaryCard: lang==='en'?(en??ja):(ja??en), sourceLang: lang })
   } catch(err) {
+    if (seq !== _modalSeq) return
     const notFound = err?.message === 'not-found'
     const eid = escAtt(id), elang = escAtt(lang)
     const errContent = `
@@ -2736,14 +2755,20 @@ function maybeCloseModal(e) {
   if (e.target.id === 'modal-overlay') closeModal()
 }
 function closeModal() {
+  ++_modalSeq
   document.getElementById('modal-root').innerHTML = ''
-  document.body.style.overflow = ''
+  const fullPageOpen = document.getElementById('builder-root')?.firstChild
+                    || document.getElementById('viewer-root')?.firstChild
+  if (!fullPageOpen) document.body.style.overflow = ''
   modalCardData = null
 }
 
-// Keyboard close
+// Keyboard close — innermost layer first
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') closeModal()
+  if (e.key !== 'Escape') return
+  hidePreviewPopup()
+  if (document.getElementById('modal-root')?.firstChild) closeModal()
+  else if (document.querySelector('.viewer-trans-overlay')) closeViewerCard()
 })
 
 // ═══════════════════════════════════════════════════
@@ -3380,7 +3405,7 @@ function loadPuterJS() {
     s.id = 'puter-script'
     s.src = 'https://js.puter.com/v2/'
     s.onload = () => res()
-    s.onerror = () => rej(new Error('Could not load Puter.js — check your connection'))
+    s.onerror = () => { s.remove(); rej(new Error('Could not load Puter.js — check your connection')) }
     document.head.appendChild(s)
   })
 }
@@ -3693,18 +3718,18 @@ function scanResultCardHTML(entry, rank) {
   const { card, score } = entry
   const rankLabel  = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : `#${rank}`
   const imgHtml    = card.image
-    ? `<img class="scan-result-img" src="${card.image}/low.webp" alt="${card.name}" loading="lazy">`
+    ? `<img class="scan-result-img" src="${escAtt(card.image + '/low.webp')}" alt="${escHtml(card.name)}" loading="lazy">`
     : `<div class="scan-result-img-ph">🃏</div>`
   const similarity = Math.round((1 - score) * 100)
-  const setName    = card.set?.name ?? card.set ?? ''
+  const setName    = typeof card.set === 'string' ? card.set : (card.set?.name ?? '')
   const localId    = card.localId ?? ''
   const sub        = [setName, localId].filter(Boolean).join(' · ')
-  return `<div class="scan-result-item" onclick="openModal('${card.id}','en')">
+  return `<div class="scan-result-item" onclick="openModal('${escAtt(card.id)}','en')">
     <span class="scan-result-rank">${rankLabel}</span>
     ${imgHtml}
     <div class="scan-result-info">
-      <div class="scan-result-name">${card.name}</div>
-      ${sub ? `<div class="scan-result-sub">${sub}</div>` : ''}
+      <div class="scan-result-name">${escHtml(card.name)}</div>
+      ${sub ? `<div class="scan-result-sub">${escHtml(sub)}</div>` : ''}
     </div>
     <span class="scan-result-pct">${similarity}%</span>
   </div>`
@@ -4160,9 +4185,12 @@ function startHold(e, cardId, lang) {
   }, 350)
 }
 
+let _previewSeq = 0
+
 function cancelHold() {
   clearTimeout(holdTimer)
   holdTimer = null
+  ++_previewSeq
   hidePreviewPopup()
   // Note: holdFired is intentionally NOT reset here — the subsequent click event reads it
 }
@@ -4180,6 +4208,7 @@ async function fetchAndShowPreview(cardId, lang, x, y) {
     if (p) { cardDetailCache.set(cardId, p); detail = p }
   }
   if (detail) { showPreviewPopup(detail, x, y); return }
+  const seq = _previewSeq
 
   // Show loading skeleton while fetching
   const loading = _createPopupEl()
@@ -4198,12 +4227,13 @@ async function fetchAndShowPreview(cardId, lang, x, y) {
         if (enId) en = await _fetchCardJSON(`https://api.tcgdex.net/v2/en/cards/${encodeURIComponent(enId)}`).catch(()=>null)
       }
     }
+    if (seq !== _previewSeq) return   // user already released — don't pop up late
     if (!ja && !en) { hidePreviewPopup(); return }
     detail = { ja, en }
     cardDetailCache.set(cardId, detail)
     lsDetailSet(cardId, detail)
     showPreviewPopup(detail, x, y)
-  } catch { hidePreviewPopup() }
+  } catch { if (seq === _previewSeq) hidePreviewPopup() }
 }
 
 function _createPopupEl() {
@@ -4348,8 +4378,11 @@ function renderViewerDeckStrip() {
 }
 
 function switchViewerDeck(id) {
+  if (!decks.some(d => d.id === id)) return
+  closeViewerCard()
   activeDeckId = id
-  saveLS('cs_active_deck_id', id)
+  saveDecks()
+  renderDeckPanel()
   const d = getDeck()
   const name = getActiveDeck()?.name || 'My Deck'
   const total = d.reduce((s, e) => s + e.qty, 0)
@@ -4464,18 +4497,11 @@ async function openViewerCard(cardId, lang) {
     try {
       let ja = null, en = null
       if (lang === 'en') {
-        const r = await fetch(`https://api.tcgdex.net/v2/en/cards/${encodeURIComponent(cardId)}`).catch(()=>null)
-        if (r?.ok) en = await r.json()
+        en = await _fetchCardJSON(`https://api.tcgdex.net/v2/en/cards/${encodeURIComponent(cardId)}`).catch(()=>null)
       } else {
-        const r = await fetch(`https://api.tcgdex.net/v2/ja/cards/${encodeURIComponent(cardId)}`).catch(()=>null)
-        if (r?.ok) ja = await r.json()
-        if (ja) {
-          const enId = toEnglishCardId(cardId)
-          if (enId) {
-            const er = await fetch(`https://api.tcgdex.net/v2/en/cards/${enId}`).catch(()=>null)
-            if (er?.ok) en = await er.json()
-          }
-        }
+        ja = await _fetchCardJSON(`https://api.tcgdex.net/v2/ja/cards/${encodeURIComponent(cardId)}`).catch(()=>null)
+        const enId = ja && toEnglishCardId(cardId)
+        if (enId) en = await _fetchCardJSON(`https://api.tcgdex.net/v2/en/cards/${encodeURIComponent(enId)}`).catch(()=>null)
       }
       if (ja || en) {
         detail = { ja, en }
@@ -4485,16 +4511,21 @@ async function openViewerCard(cardId, lang) {
     } catch {}
   }
 
+  if (!overlay.isConnected) return   // closed or replaced while loading
   const panel = overlay.querySelector('.viewer-trans-panel')
 
-  if (!detail) {
+  const p = detail && (detail.en ?? detail.ja)
+  if (!p) {
+    const eid = escAtt(cardId), elang = escAtt(lang)
     panel.innerHTML = `
       <p style="text-align:center;color:#f88;font-size:0.85rem;padding:1rem 0">Could not load card data</p>
-      <div style="text-align:center"><button class="btn-ghost" onclick="closeViewerCard()">Close</button></div>`
+      <div style="display:flex;gap:0.5rem;justify-content:center">
+        <button class="btn-ghost" onclick="openViewerCard('${eid}','${elang}')">↻ Retry</button>
+        <button class="btn-ghost" onclick="closeViewerCard()">Close</button>
+      </div>`
     return
   }
 
-  const p         = detail.en ?? detail.ja
   const ja        = detail.ja
   const imgUrl    = p.image ? p.image + '/low.webp' : null
   const isTrainer = p.category === 'Trainer' || (!p.hp && !!p.effect)
@@ -4950,7 +4981,17 @@ async function copyShareLink() {
 }
 
 // ── Import shared decks ──────────────────────────────
-function _importPayloads(payloads) {
+function _importPayloads(rawPayloads) {
+  // Shared links are untrusted input — keep only well-formed entries
+  const payloads = rawPayloads
+    .map(p => ({
+      n: String(p.n).slice(0, 80),
+      c: p.c
+        .filter(c => c && typeof c.i === 'string' && c.i && Number.isFinite(Number(c.q)) && Number(c.q) > 0)
+        .map(c => ({ ...c, q: Math.min(60, Math.floor(Number(c.q))), n: String(c.n ?? c.i) }))
+    }))
+    .filter(p => p.c.length)
+  if (!payloads.length) { showToast('⚠️ Shared link has no valid cards'); return }
   const totalCards = payloads.reduce((s,p)=>s+p.c.reduce((ss,c)=>ss+c.q,0),0)
   payloads.forEach(p => {
     const cards = p.c.map(c => {
