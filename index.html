@@ -5038,16 +5038,16 @@ async function copyShareLink() {
     })
   }))
   try {
-    let encoded, fragment
+    // Query param (not #hash): a new query forces a real page load, so phones and
+    // in-app browsers can't reuse a stale tab or a cached copy of the page
+    let suffix
     if (typeof CompressionStream !== 'undefined') {
-      encoded  = await _encodeV2(payloads)
-      fragment = '#v2=' + encoded
+      suffix = '?s=' + await _encodeV2(payloads)
     } else {
       // Fallback for very old browsers: plain base64
-      encoded  = encodeURIComponent(btoa(unescape(encodeURIComponent(JSON.stringify(payloads)))))
-      fragment = '#decks=' + encoded
+      suffix = '#decks=' + encodeURIComponent(btoa(unescape(encodeURIComponent(JSON.stringify(payloads)))))
     }
-    const url   = window.location.href.split('#')[0] + fragment
+    const url   = window.location.origin + window.location.pathname + suffix
     const label = `${selected.length} deck${selected.length>1?'s':''}`
     if (navigator.clipboard?.writeText) {
       navigator.clipboard.writeText(url)
@@ -5098,16 +5098,20 @@ function _importPayloads(rawPayloads) {
 }
 
 async function checkShareHash() {
-  const hash = window.location.hash
-  if (!hash || hash === '#') return
-  // Clear right away so a duplicate hashchange/startup call can't import twice
-  window.history.replaceState(null, '', window.location.href.split('#')[0])
+  const params = new URLSearchParams(window.location.search)
+  const sParam = params.get('s')
+  const hash   = window.location.hash
+  if (!sParam && (!hash || hash === '#')) return
+  // Clear right away so a duplicate event/startup call can't import twice
+  params.delete('s')
+  const rest = params.toString()
+  window.history.replaceState(null, '', window.location.pathname + (rest ? '?' + rest : ''))
   let payloads = []
 
   try {
-    if (hash.startsWith('#v2=')) {
-      // New compressed format
-      const arr = await _decodeV2(hash.slice(4))
+    if (sParam || hash.startsWith('#v2=')) {
+      // Compressed format (?s= current, #v2= older links)
+      const arr = await _decodeV2(sParam || hash.slice(4))
       if (Array.isArray(arr)) payloads = arr.filter(p => p?.n && Array.isArray(p?.c))
       else if (arr?.n && Array.isArray(arr?.c)) payloads = [arr]
     } else if (hash.startsWith('#decks=')) {
@@ -5117,9 +5121,9 @@ async function checkShareHash() {
       const p = _decodeLegacy(hash.slice(6))
       if (p?.n && Array.isArray(p?.c)) payloads = [p]
     }
-  } catch(e) { console.warn('Share hash parse error:', e) }
+  } catch(e) { console.warn('Share link parse error:', e) }
 
-  if (!payloads.length) return
+  if (!payloads.length) { showToast('⚠️ This share link is incomplete or broken — ask for it again'); return }
   _importPayloads(payloads)
 }
 
@@ -5215,8 +5219,10 @@ document.getElementById('mode-scan').style.display = 'none'
 syncDeck()
 renderDeckPanel()
 ;(async () => { await checkShareHash() })()
-// Opening another share link in an already-open tab only changes the hash — no reload
+// Old #hash links opened in an already-open tab don't reload; phones may also restore a frozen tab
 window.addEventListener('hashchange', () => { checkShareHash() })
+window.addEventListener('pageshow', e => { if (e.persisted) checkShareHash() })
+document.addEventListener('visibilitychange', () => { if (!document.hidden) checkShareHash() })
 initTypeFilterChips()   // build energy type filter chips using real SVG icons
 initAllSets()           // fetch all 230+ sets and populate expansion dropdown with optgroups
 hydrateDeckCategories() // background-fill _cat/_stage/_sub for cards missing it
