@@ -5085,6 +5085,12 @@ function _importPayloads(rawPayloads) {
   activeDeckId = decks[decks.length - 1].id
   saveDecks()
   renderDeckPanel()
+  if (document.getElementById('builder-root')?.firstChild) {
+    renderBuilderTabs(); renderBuilderLeft(); renderBuilderRight()
+    const inp = document.getElementById('db-deck-name')
+    if (inp) inp.value = getActiveDeck()?.name || ''
+  }
+  if (document.getElementById('viewer-root')?.firstChild) openViewer()
   const deckNames = payloads.map(p=>p.n).join(', ')
   showToast(`🃏 Imported "${deckNames}" — ${totalCards} card${totalCards!==1?'s':''}`)
   // Hydrate _cat/_stage/_sub for imported cards (async import runs after startup hydration)
@@ -5094,6 +5100,8 @@ function _importPayloads(rawPayloads) {
 async function checkShareHash() {
   const hash = window.location.hash
   if (!hash || hash === '#') return
+  // Clear right away so a duplicate hashchange/startup call can't import twice
+  window.history.replaceState(null, '', window.location.href.split('#')[0])
   let payloads = []
 
   try {
@@ -5112,7 +5120,6 @@ async function checkShareHash() {
   } catch(e) { console.warn('Share hash parse error:', e) }
 
   if (!payloads.length) return
-  window.history.replaceState(null, '', window.location.href.split('#')[0])
   _importPayloads(payloads)
 }
 
@@ -5208,6 +5215,8 @@ document.getElementById('mode-scan').style.display = 'none'
 syncDeck()
 renderDeckPanel()
 ;(async () => { await checkShareHash() })()
+// Opening another share link in an already-open tab only changes the hash — no reload
+window.addEventListener('hashchange', () => { checkShareHash() })
 initTypeFilterChips()   // build energy type filter chips using real SVG icons
 initAllSets()           // fetch all 230+ sets and populate expansion dropdown with optgroups
 hydrateDeckCategories() // background-fill _cat/_stage/_sub for cards missing it
